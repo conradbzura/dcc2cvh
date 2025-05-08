@@ -10,7 +10,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
-dependencies = ["click", "pymongo"]
+dependencies = ["aiohttp", "click", "pymongo", "wool"]
 description = "A Python utility for parsing and normalizing various DCC datapackages."
 dynamic = ["version"]
 license = { text = "MIT License" }

@@ -23,13 +23,13 @@ This will start a container running MongoDB listening on port 27017.
 Ensure that both Docker and MongoDB are installed on your system and properly configured before running this command.
 
 ## Using the CLI
-The package provides a CLI command `load-c2m2-datapackage` to process and load CFDE datapackages into MongoDB.
+The package provides a CLI command `load-dataset` under the command group `c2m2` to process and load CFDE datapackages into MongoDB.
 
-### Command: `load-c2m2-datapackage`
+### Command: `load-dataset`
 
 #### Usage
 ```bash
-load-c2m2-datapackage DIRECTORY
+dcc2cvh c2m2 load-dataset DIRECTORY
 ```
 
 #### Arguments
