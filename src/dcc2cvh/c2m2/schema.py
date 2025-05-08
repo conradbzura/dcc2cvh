@@ -2,7 +2,7 @@
 #  using frictionless-dataclass.
 
 from dataclasses import dataclass
-from typing import Optional, List, Any
+from typing import Any, List, Optional
 
 
 class table_schema_specs_for_c2m2_encoding_of_dcc_metadata:
