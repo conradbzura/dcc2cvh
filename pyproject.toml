@@ -5,18 +5,20 @@ requires = ["setuptools>=64", "setuptools-scm>=8"]
 [project]
 authors = [{ name = "Conrad Bzura", email = "conradbzura@gmail.com" }]
 classifiers = [
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
-dependencies = ["aiohttp", "click", "pymongo", "wool"]
+dependencies = ["aiohttp", "click", "fastapi" ,"motor","pymongo", "strawberry-graphql", "uvicorn", "wool"]
 description = "A Python utility for parsing and normalizing various DCC datapackages."
 dynamic = ["version"]
 license = { text = "MIT License" }
 name = "dcc2cvh"
 readme = { file = "README.md", content-type = "text/markdown" }
-requires-python = ">=3.9"
+requires-python = ">=3.10"
+
+[project.optional-dependencies]
+dev = ["debugpy", "ruff"]
 
 [project.scripts]
 dcc2cvh = "dcc2cvh.cli:cli"
