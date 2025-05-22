@@ -8,7 +8,7 @@ class FileMetadataModel(BaseModel):
     """A stable digital asset"""
 
     class Config:
-        arbitrary_types_allowed = True
+        arbitrary_types_allowed=True
 
     # _id: ObjectId
 
@@ -38,7 +38,7 @@ class FileMetadataModel(BaseModel):
     size_in_bytes: Optional[int] = None
 
     # (integer) The total decompressed size in bytes of the contents of this file: null if this file is not compressed
-    uncompressed_size_in_bytes: Optional[int] = None
+    # uncompressed_size_in_bytes: Optional[int] = None
 
     # (string) (preferred) SHA-256 checksum for this file [sha256, md5 cannot both be null]
     sha256: Optional[str] = None
@@ -128,12 +128,11 @@ class AssayType(BaseModel):
     description: Optional[str] = None
 
     # (array) A list of synonyms for this term as identified by the OBI metadata
-    synonyms: Optional[List[Any]] = None
+    # synonyms: Optional[List[Any]] = None
 
 
 class FileFormat(BaseModel):
     """List of EDAM CV 'format:' terms used to describe formats of C2M2 files"""
-
     # _id: ObjectId
     # (string) An EDAM CV format term
     id: str = str()
@@ -145,12 +144,11 @@ class FileFormat(BaseModel):
     description: Optional[str] = None
 
     # (array) A list of synonyms for this term as identified by the EDAM metadata
-    synonyms: Optional[List[Any]] = None
+    # synonyms: Optional[List[Any]] = None
 
 
 class DataType(BaseModel):
     """List of EDAM CV 'data:' terms used to describe data in C2M2 files"""
-
     # _id: ObjectId
     # (string) An EDAM CV data term
     id: str = str()
@@ -162,12 +160,11 @@ class DataType(BaseModel):
     description: Optional[str] = None
 
     # (array) A list of synonyms for this term as identified by the EDAM metadata
-    synonyms: Optional[List[Any]] = None
+    # synonyms: Optional[List[Any]] = None
 
 
 class Collection(BaseModel):
     """A grouping of C2M2 files, biosamples and/or subjects"""
-
     # _id: ObjectId
     biosamples: List[Biosample]
 
@@ -193,12 +190,11 @@ class Collection(BaseModel):
     description: Optional[str] = None
 
     # (boolean) Does this collection contain time-series data? (allowed values: [true|false|null] -- true == yes, contains time-series data; false == no, doesn't contain time-series data; null == no info provided)
-    has_time_series_data: Optional[bool] = None
+    # has_time_series_data: Optional[bool] = None
 
 
 class Biosample(BaseModel):
     """A tissue sample or other physical specimen"""
-
     # _id: ObjectId
     # (string) A CFDE-cleared identifier representing the top-level data space containing this biosample [part 1 of 2-component composite primary key]
     id_namespace: str = str()
@@ -230,7 +226,6 @@ class Biosample(BaseModel):
 
 class Anatomy(BaseModel):
     """List of Uber-anatomy ontology (UBERON) CV terms used to locate the origin of a C2M2 biosample within the physiology of its source or host organism"""
-
     # _id: ObjectId
     # (string) An UBERON CV term
     id: str = str()
@@ -242,4 +237,4 @@ class Anatomy(BaseModel):
     description: Optional[str] = None
 
     # (array) A list of synonyms for this term as identified by the UBERON metadata
-    synonyms: Optional[List[Any]] = None
+    # synonyms: Optional[List[Any]] = None
