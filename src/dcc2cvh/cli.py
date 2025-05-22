@@ -18,7 +18,7 @@ from dcc2cvh.mongo import PIPELINE
 
 
 BATCH_SIZE: Final = 100
-POOL_BREADTH: Final = 4
+POOL_BREADTH: Final = 8
 
 __client__ = None
 
@@ -28,7 +28,7 @@ class TTLSemaphore(asyncio.BoundedSemaphore):
         super().__init__(limit)
         self._interval = interval
 
-    def __aexit__(self, *args, **kwargs):
+    async def __aexit__(self, *args, **kwargs):
         pass
 
     async def acquire(self):
@@ -49,11 +49,6 @@ async def _acquire_request_semaphore():
 async def rate_limit():
     await _acquire_request_semaphore()
     yield
-
-
-@wool.WoolTaskEvent.handler("task-started", "task-stopped")
-def on_task_event(event, task):
-    pass
 
 
 def debug(ctx, param, value):
@@ -120,15 +115,8 @@ def load_c2m2_dataset(directory: os.PathLike):
 async def _load_c2m2_dataset(directory: os.PathLike):
     wool.__log_level__ = logging.INFO
     logging.debug(f"Loading directory: {directory}")
-    with wool.Pool(
-        address=("localhost", 48800),
-        authkey=b"",
-        breadth=POOL_BREADTH,
-        log_level=logging.INFO,
-    ):
-        with wool.locking.LockPool(
-            address=("localhost", 48900), authkey=b"", log_level=logging.INFO
-        ):
+    with wool.pool(authkey=b"", breadth=POOL_BREADTH, log_level=logging.INFO):
+        with wool.locking.pool(authkey=b"", log_level=logging.INFO):
             tasks = []
             for filename in os.listdir(directory):
                 if filename.endswith(".csv") or filename.endswith(".tsv"):
@@ -160,14 +148,20 @@ async def persist(filepath, delimiter):
                     count += 1
                     record = {**row, "submission": directory, "table": table}
                     batch.append(record)
-                    # if table == "file" and record["access_url"]:
-                        # async with semaphore:
-                        #     metadata_task = asyncio.create_task(get_file_metadata(record["access_url"]))
-                        #     metadata_task.add_done_callback(lambda *_: semaphore.release)
-                        #     metadata.append(metadata_task)
+                    if table == "file" and record["access_url"]:
+                        async with semaphore:
+                            metadata_task = asyncio.create_task(
+                                get_file_metadata(record["access_url"])
+                            )
+                            metadata_task.add_done_callback(
+                                lambda *_: semaphore.release
+                            )
+                            metadata.append(metadata_task)
                     if len(batch) >= BATCH_SIZE:
                         tasks.append(
-                            asyncio.create_task(flush("c2m2", table, copy(batch), copy(metadata)))
+                            asyncio.create_task(
+                                flush("c2m2", table, copy(batch), copy(metadata))
+                            )
                         )
                         batch.clear()
                         metadata.clear()
@@ -175,7 +169,11 @@ async def persist(filepath, delimiter):
                         await asyncio.gather(*tasks)
                         tasks.clear()
                 if batch:
-                    tasks.append(asyncio.create_task(flush("c2m2", table, copy(batch), copy(metadata))))
+                    tasks.append(
+                        asyncio.create_task(
+                            flush("c2m2", table, copy(batch), copy(metadata))
+                        )
+                    )
                     metadata.clear()
                     batch.clear()
                 if tasks:
@@ -200,12 +198,17 @@ def aggregate(db):
     yield from db.file.aggregate(PIPELINE)
 
 
-@wool.task
-async def get_file_metadata_batch(urls):
-    with wool.LocalSession():
-        tasks = [asyncio.create_task(get_file_metadata(url, i)) for i, url in enumerate(urls)]
-        results = await asyncio.gather(*tasks)
-        return results
+@c2m2.command
+def create_files_view():
+    db = get_client()["c2m2-backup"]
+    db.drop_collection("files")
+    db.command(
+        "create",
+        "files",
+        viewOn="file",
+        pipeline=PIPELINE,
+        writeConcern={"w": 1},
+    )
 
 
 @wool.task
@@ -214,9 +217,7 @@ async def get_file_metadata(url):
         if (parsed_url := urllib.parse.urlparse(url)).scheme == "drs":
             url = parsed_url._replace(scheme="https").geturl()
         async with aiohttp.ClientSession() as session:
-            with wool.locking.LockPoolSession(
-                address=("localhost", 48900), authkey=b""
-            ):
+            with wool.locking.session(authkey=b""):
                 async with rate_limit():
                     async with session.get(url) as response:
                         if response.status == 200:
