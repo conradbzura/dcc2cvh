@@ -11,16 +11,17 @@ pip install git+https://github.com/conradbzura/dcc2cvh.git
 ```
 
 ## Starting MongoDB
-This project includes a `Makefile` to simplify starting MongoDB. To start MongoDB, run:
+This project includes a `Makefile` to simplify building and starting MongoDB and the API. To start MongoDB, run:
 
 ```bash
-make mongo
+make mongodb
+make api
 ```
 
-This will start a container running MongoDB listening on port 27017.
+This will start a container running MongoDB listening on port 27017 and the GraphQL API listening on port 8000.
 
 > [!NOTE]
-Ensure that both Docker and MongoDB are installed on your system and properly configured before running this command.
+Ensure that both Docker is installed on your system and properly configured before running this command.
 
 ## Using the CLI
 The package provides a CLI command `load-dataset` under the command group `c2m2` to process and load CFDE datapackages into MongoDB.

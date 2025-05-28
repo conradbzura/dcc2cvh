@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 from pydantic import BaseModel
-from typing import Any, List, Optional
+from typing import List, Optional
 
 
 class FileMetadataModel(BaseModel):
     """A stable digital asset"""
 
     class Config:
-        arbitrary_types_allowed=True
+        arbitrary_types_allowed = True
 
     # _id: ObjectId
 
@@ -133,6 +133,7 @@ class AssayType(BaseModel):
 
 class FileFormat(BaseModel):
     """List of EDAM CV 'format:' terms used to describe formats of C2M2 files"""
+
     # _id: ObjectId
     # (string) An EDAM CV format term
     id: str = str()
@@ -149,6 +150,7 @@ class FileFormat(BaseModel):
 
 class DataType(BaseModel):
     """List of EDAM CV 'data:' terms used to describe data in C2M2 files"""
+
     # _id: ObjectId
     # (string) An EDAM CV data term
     id: str = str()
@@ -165,6 +167,7 @@ class DataType(BaseModel):
 
 class Collection(BaseModel):
     """A grouping of C2M2 files, biosamples and/or subjects"""
+
     # _id: ObjectId
     biosamples: List[Biosample]
 
@@ -195,6 +198,7 @@ class Collection(BaseModel):
 
 class Biosample(BaseModel):
     """A tissue sample or other physical specimen"""
+
     # _id: ObjectId
     # (string) A CFDE-cleared identifier representing the top-level data space containing this biosample [part 1 of 2-component composite primary key]
     id_namespace: str = str()
@@ -226,6 +230,7 @@ class Biosample(BaseModel):
 
 class Anatomy(BaseModel):
     """List of Uber-anatomy ontology (UBERON) CV terms used to locate the origin of a C2M2 biosample within the physiology of its source or host organism"""
+
     # _id: ObjectId
     # (string) An UBERON CV term
     id: str = str()
