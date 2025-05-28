@@ -12,7 +12,7 @@ mongodb:
 	@echo "Starting the MongoDB container..."
 	docker run -d --name mongodb --network cvh-backend-network --network-alias cvh-backend -p 27017:27017 mongo:latest
 	@echo "Restoring database..."
-	docker run --rm --name mongodb-restore --network cvh-backend-network --volume $(shell pwd)/database:/database mongodb mongorestore --gzip --host cvh-backend:27017 /database
+	docker run --rm --name mongodb-restore --network cvh-backend-network --volume $(shell pwd)/database:/database mongo:latest mongorestore --gzip --host cvh-backend:27017 /database
 	@echo "MongoDB container is up and running on port 27017."
 
 api:
