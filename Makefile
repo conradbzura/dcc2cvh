@@ -1,4 +1,14 @@
+network:
+	@echo "Checking if Docker network 'cvh-backend-network' exists..."
+	@if ! docker network inspect cvh-backend-network >/dev/null 2>&1; then \
+		echo "Creating Docker network 'cvh-backend-network'..."; \
+		docker network create cvh-backend-network; \
+	else \
+		echo "Network cvh-backend-network already exists."; \
+	fi
+
 mongodb:
+	make network
 	@echo "Starting the MongoDB container..."
 	docker run -d --name mongodb --network cvh-backend-network --network-alias cvh-backend -p 27017:27017 mongo:latest
 	@echo "Restoring database..."
@@ -6,6 +16,7 @@ mongodb:
 	@echo "MongoDB container is up and running on port 27017."
 
 api:
+	make network
 	@echo "Building the API Docker image..."
 	docker build -t api -f Dockerfile.api .
 	@echo "Starting the API container..."
