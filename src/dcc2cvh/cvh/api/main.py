@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    print(f"Connecting to MongoDB at {api.DATABASE_URL}")
     api.db = (client := AsyncIOMotorClient(api.DATABASE_URL))[api.DATABASE_NAME]
     yield
     client.close()
