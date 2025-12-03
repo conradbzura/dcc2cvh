@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from strawberry.fastapi import GraphQLRouter
 from dcc2cvh.cvh.api.gql.schema import schema
 from dcc2cvh.cvh import api
+from dcc2cvh.cvh.api.routers.data import router as data_router
 from contextlib import asynccontextmanager
 
 
@@ -16,3 +17,4 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 app.include_router(GraphQLRouter(schema), prefix="/metadata")
+app.include_router(data_router)

@@ -13,10 +13,18 @@ ObjectIdScalar = strawberry.scalar(
 
 
 def is_pydantic_model(annotation):
-    if issubclass(annotation, BaseModel):
-        return True
-    elif subtypes := getattr(annotation, "__args__", None):
-        return any(issubclass(subtype, BaseModel) for subtype in subtypes)
+    try:
+        if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+            return True
+    except TypeError:
+        pass
+
+    if subtypes := getattr(annotation, "__args__", None):
+        return any(
+            isinstance(subtype, type) and issubclass(subtype, BaseModel)
+            for subtype in subtypes
+        )
+    return False
 
 
 def build_strawberry_type(type):
@@ -38,21 +46,27 @@ def annotate(model, name=None):
                 else:
                     type.__annotations__[field_name] = field_type
             else:
-                if issubclass(field_type, BaseModel):
-                    T = build_strawberry_type(field_type)
+                try:
+                    if isinstance(field_type, type) and issubclass(field_type, BaseModel):
+                        T = build_strawberry_type(field_type)
+                        type.__annotations__[field_name] = T
+                except TypeError:
+                    pass
 
-                    type.__annotations__[field_name] = T
-                elif subtypes := getattr(field_type, "__args__", None):
+                if subtypes := getattr(field_type, "__args__", None):
                     for subtype in subtypes:
-                        if issubclass(subtype, BaseModel):
-                            T = build_strawberry_type(subtype)
+                        try:
+                            if isinstance(subtype, type) and issubclass(subtype, BaseModel):
+                                T = build_strawberry_type(subtype)
 
-                            _T = field_type.__origin__[
-                                T,
-                                *(t for t in subtypes if t is not subtype),
-                            ]
-                            type.__annotations__[field_name] = _T
-                            break
+                                _T = field_type.__origin__[
+                                    T,
+                                    *(t for t in subtypes if t is not subtype),
+                                ]
+                                type.__annotations__[field_name] = _T
+                                break
+                        except TypeError:
+                            pass
         return type
 
     return wrapper

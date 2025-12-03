@@ -1,0 +1,1 @@
+"""GraphQL schema and types."""

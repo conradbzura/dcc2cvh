@@ -9,7 +9,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
-dependencies = ["aiohttp", "click", "fastapi", "motor", "pymongo", "strawberry-graphql", "uvicorn", "wool"]
+dependencies = ["aiohttp", "click", "fastapi", "globus-sdk>=4.1.0", "motor", "pymongo", "strawberry-graphql", "uvicorn", "wool"]
 description = "A Python utility for parsing and normalizing various DCC datapackages."
 dynamic = ["version"]
 license = { text = "MIT License" }
