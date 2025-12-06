@@ -10,6 +10,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+class RangeNotSatisfiableError(Exception):
+    """Raised when requested byte range cannot be satisfied."""
+
+    def __init__(self, file_size: int):
+        self.file_size = file_size
+        super().__init__(f"Range not satisfiable for file of size {file_size}")
+
+
 class DRSAccessMethod(BaseModel):
     """GA4GH DRS access method for retrieving object bytes."""
 
@@ -56,6 +64,92 @@ async def parse_drs_uri(drs_uri: str) -> tuple:
         raise ValueError(f"Invalid DRS URI format: {drs_uri}")
 
     return hostname, object_id
+
+
+def parse_range_header(range_header: str, file_size: int) -> tuple[int, int, int]:
+    """
+    Parse and validate HTTP Range header against file size.
+
+    Supports formats:
+    - bytes=start-end (specific range)
+    - bytes=start- (from start to end of file)
+    - bytes=-suffix (last N bytes)
+
+    Args:
+        range_header: Range header value (e.g., "bytes=0-1023")
+        file_size: Total file size in bytes
+
+    Returns:
+        Tuple of (start_byte, end_byte, content_length)
+
+    Raises:
+        ValueError: If range syntax is invalid
+        RangeNotSatisfiableError: If range exceeds file bounds
+    """
+    # Validate format: must start with "bytes="
+    if not range_header.startswith("bytes="):
+        raise ValueError("Range header must start with 'bytes='")
+
+    # Extract range part after "bytes="
+    range_spec = range_header[6:].strip()
+
+    # Reject multipart range requests (multiple ranges)
+    if "," in range_spec:
+        raise ValueError("Multipart range requests are not supported")
+
+    # Parse start and end
+    if "-" not in range_spec:
+        raise ValueError("Invalid range format: missing '-'")
+
+    parts = range_spec.split("-", 1)
+    start_str, end_str = parts[0].strip(), parts[1].strip()
+
+    # Handle suffix-length format: bytes=-500 (last 500 bytes)
+    if not start_str and end_str:
+        try:
+            suffix_length = int(end_str)
+        except ValueError:
+            raise ValueError("Suffix length must be an integer")
+        if suffix_length <= 0:
+            raise ValueError("Suffix length must be positive")
+        start = max(0, file_size - suffix_length)
+        end = file_size - 1
+
+    # Handle open-ended format: bytes=1000- (from byte 1000 to end)
+    elif start_str and not end_str:
+        try:
+            start = int(start_str)
+        except ValueError:
+            raise ValueError("Start byte must be an integer")
+        end = file_size - 1
+
+    # Handle specific range: bytes=0-1023
+    elif start_str and end_str:
+        try:
+            start = int(start_str)
+            end = int(end_str)
+        except ValueError:
+            raise ValueError("Start and end bytes must be integers")
+
+    else:
+        raise ValueError("Invalid range format")
+
+    # Validate bounds
+    if start < 0 or end < 0:
+        raise ValueError("Range values cannot be negative")
+
+    if start > end:
+        raise ValueError("Start byte must be <= end byte")
+
+    if start >= file_size:
+        raise RangeNotSatisfiableError(file_size)
+
+    # Clamp end to file size
+    end = min(end, file_size - 1)
+
+    content_length = end - start + 1
+
+    return start, end, content_length
 
 
 async def fetch_drs_object(
@@ -191,14 +285,16 @@ async def get_https_download_url(access_methods: List[DRSAccessMethod]) -> str:
 
 async def stream_from_url(
     url: str,
-    auth_headers: Optional[dict] = None
+    auth_headers: Optional[dict] = None,
+    range_header: Optional[str] = None
 ) -> AsyncGenerator[bytes, None]:
     """
-    Stream file bytes from HTTPS URL.
+    Stream file bytes from HTTPS URL with optional Range request support.
 
     Args:
-        url: Download URL
-        auth_headers: Optional headers to include in request
+        url: HTTPS download URL
+        auth_headers: Optional authentication headers
+        range_header: Optional Range header value to forward to upstream
 
     Yields:
         Chunks of file bytes
@@ -206,21 +302,27 @@ async def stream_from_url(
     Raises:
         Exception: On download errors
     """
-    headers = auth_headers or {}
+    headers = auth_headers.copy() if auth_headers else {}
+
+    # Add Range header if provided
+    if range_header:
+        headers["Range"] = range_header
 
     async with aiohttp.ClientSession() as session:
         try:
             async with session.get(
                 url, headers=headers, timeout=aiohttp.ClientTimeout(total=None, connect=30)
             ) as response:
-                if response.status != 200:
+                # Accept 200 (full file) or 206 (partial content)
+                if response.status not in (200, 206):
                     raise Exception(f"Failed to download file: HTTP {response.status}")
 
+                # Stream chunks while response context is open
                 async for chunk in response.content.iter_chunked(8192):
                     if chunk:
                         yield chunk
 
         except asyncio.TimeoutError:
-            raise Exception("Download timeout")
+            raise Exception(f"Timeout downloading file from {url}")
         except aiohttp.ClientError as e:
-            raise Exception(f"Download error: {e}")
+            raise Exception(f"Network error downloading file: {e}")

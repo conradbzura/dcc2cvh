@@ -79,6 +79,12 @@ class FileMetadataModel(BaseModel):
     # (string) A DRS URI or otherwise a publicly accessible DRS-compatible URL
     access_url: Optional[str] = None
 
+    # (string) HuBMAP dataset status (e.g., "Published", "QA") - cached from HuBMAP Search API
+    status: Optional[str] = None
+
+    # (string) HuBMAP data access level ("public", "consortium", "protected") - cached from HuBMAP Search API
+    data_access_level: Optional[str] = None
+
 
 class DCC(BaseModel):
     """The Common Fund program or data coordinating center (DCC, identified by the given project foreign key) that produced this C2M2 instance"""

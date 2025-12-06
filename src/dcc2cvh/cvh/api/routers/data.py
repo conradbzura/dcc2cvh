@@ -1,12 +1,13 @@
 """REST API router for streaming files from DCCs."""
 
 from fastapi import APIRouter, Header, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
 from typing import Optional
 import logging
 
 from dcc2cvh.cvh import api
 from dcc2cvh.cvh.services import drs, globus
+from dcc2cvh.cvh.services.hubmap import fetch_access_metadata, extract_uuid_from_persistent_id
 from dcc2cvh.cvh.models import FileMetadataModel
 
 logger = logging.getLogger(__name__)
@@ -18,7 +19,8 @@ router = APIRouter(prefix="/data", tags=["data"])
 async def stream_file(
     dcc: str,
     local_id: str,
-    authorization: Optional[str] = Header(None)
+    authorization: Optional[str] = Header(None),
+    range: Optional[str] = Header(None)
 ):
     """
     Stream file from DCC via HTTPS or Globus using file metadata from database.
@@ -146,7 +148,76 @@ async def stream_file(
             else:
                 raise HTTPException(status_code=502, detail="Failed to fetch file metadata")
 
-        # 5. Determine access method (HTTPS or Globus)
+        # 6. Check HuBMAP access level and enforce access control
+        if normalized_dcc == "hubmap":
+            data_access_level = file_doc.get("data_access_level")
+
+            # If access level not cached, fetch from Search API and cache it
+            if data_access_level is None:
+                logger.info(f"Access level not cached for {local_id}, querying HuBMAP Search API")
+
+                # Extract UUID from persistent_id
+                persistent_id = file_doc.get("persistent_id")
+                if persistent_id:
+                    uuid = extract_uuid_from_persistent_id(persistent_id)
+
+                    if uuid:
+                        # Fetch access metadata from Search API
+                        metadata = await fetch_access_metadata(uuid)
+
+                        if metadata and metadata.data_access_level:
+                            # Cache in MongoDB for future requests
+                            logger.debug(f"Caching access level '{metadata.data_access_level}' for {local_id}")
+
+                            await api.db.file.update_one(
+                                {"id_namespace": id_namespace, "local_id": local_id},
+                                {"$set": {
+                                    "status": metadata.status,
+                                    "data_access_level": metadata.data_access_level
+                                }}
+                            )
+
+                            data_access_level = metadata.data_access_level
+                        else:
+                            logger.warning(f"Could not fetch access level for {local_id} (UUID: {uuid})")
+                    else:
+                        logger.warning(f"Could not extract UUID from persistent_id: {persistent_id}")
+
+            # If still unknown after fetch attempt, allow request to proceed
+            # Let downstream Globus/DRS handle access control
+            if data_access_level is None:
+                logger.info(
+                    f"HuBMAP file {local_id} has unknown access level. "
+                    "Allowing request to proceed - downstream access control will enforce permissions."
+                )
+                # Don't block the request - continue to streaming logic
+
+            # Enforce access control based on data_access_level
+            elif data_access_level in ["consortium", "protected"]:
+                if not auth_token:
+                    if data_access_level == "consortium":
+                        message = (
+                            "This file requires consortium access. "
+                            "You must be a member of the HuBMAP consortium to access this file. "
+                            "Please authenticate with a Globus access token that has HuBMAP consortium membership. "
+                            "Obtain a token from https://app.globus.org/ and include it in the "
+                            "Authorization header as 'Bearer <token>'."
+                        )
+                    else:  # protected
+                        message = (
+                            "This file requires protected access. "
+                            "This file contains protected data (genomic/HIPAA) and requires formal access approval. "
+                            "You must: (1) be a HuBMAP consortium member, and (2) have completed data use agreements. "
+                            "Please authenticate with a Globus access token and ensure you have the required access approvals. "
+                            "Contact HuBMAP support at help@hubmapconsortium.org for access requests."
+                        )
+
+                    logger.info(f"Blocked {data_access_level} access to {local_id} - no authentication provided")
+                    raise HTTPException(status_code=403, detail=message)
+
+            # Public files - continue normally (no auth required)
+
+        # 7. Determine access method (HTTPS or Globus)
         has_globus = any(m.type == "globus" for m in drs_object.access_methods)
         has_https = any(m.type in ["https", "s3"] for m in drs_object.access_methods)
 
@@ -163,20 +234,95 @@ async def stream_file(
                 if authorization:
                     auth_headers = {"Authorization": authorization}
 
-                return StreamingResponse(
-                    drs.stream_from_url(download_url, auth_headers),
-                    media_type=drs_object.mime_type or "application/octet-stream",
-                    headers={
-                        "Content-Disposition": f'attachment; filename="{drs_object.name or "file"}"'
-                    }
+                # Prepare response headers
+                response_headers = {
+                    "Content-Disposition": f'attachment; filename="{drs_object.name or "file"}"',
+                    "Accept-Ranges": "bytes"
+                }
+
+                status_code = 200
+                range_header_to_send = None
+
+                # Handle Range request if present
+                if range:
+                    # Validate that file size is available
+                    if not drs_object.size:
+                        logger.warning(f"Range request for file without size metadata: {local_id}")
+                        raise HTTPException(
+                            status_code=500,
+                            detail="Cannot process range request: file size unavailable"
+                        )
+
+                    try:
+                        # Parse and validate the Range header
+                        start, end, content_length = drs.parse_range_header(range, drs_object.size)
+
+                        logger.debug(f"Range request: bytes {start}-{end}/{drs_object.size}")
+
+                        # Set response for partial content
+                        range_header_to_send = range
+                        status_code = 206
+                        response_headers["Content-Range"] = f"bytes {start}-{end}/{drs_object.size}"
+                        response_headers["Content-Length"] = str(content_length)
+
+                    except drs.RangeNotSatisfiableError as e:
+                        # Range exceeds file bounds - return 416
+                        logger.warning(f"Range not satisfiable: {range} for file size {e.file_size}")
+                        raise HTTPException(
+                            status_code=416,
+                            headers={
+                                "Content-Range": f"bytes */{e.file_size}",
+                                "Accept-Ranges": "bytes"
+                            }
+                        )
+
+                    except ValueError as e:
+                        # Invalid Range header syntax - return 400
+                        logger.warning(f"Invalid Range header syntax: {range}")
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Invalid Range header: {str(e)}"
+                        )
+
+                # Stream file (with or without range)
+                chunk_gen = drs.stream_from_url(
+                    download_url,
+                    auth_headers,
+                    range_header_to_send
                 )
 
+                # Set Content-Type from DRS metadata
+                media_type = drs_object.mime_type or "application/octet-stream"
+
+                # For full file requests, include Content-Length from DRS metadata if available
+                if not range and drs_object.size:
+                    response_headers["Content-Length"] = str(drs_object.size)
+
+                return StreamingResponse(
+                    chunk_gen,
+                    status_code=status_code,
+                    media_type=media_type,
+                    headers=response_headers
+                )
+
+            except HTTPException:
+                # Re-raise HTTP exceptions (400, 416, 500, etc.)
+                raise
             except Exception as e:
                 logger.error(f"HTTPS streaming error: {str(e)}")
                 raise HTTPException(status_code=502, detail="Failed to stream file")
 
         elif has_globus:
             # Globus transfer + stream (HuBMAP path)
+
+            # Reject Range requests for Globus transfers - not supported
+            if range:
+                logger.warning(f"Range request not supported for Globus transfer: {local_id}")
+                raise HTTPException(
+                    status_code=501,
+                    detail="Range requests are not supported for this file. Globus transfers require full file download."
+                )
+
             if not auth_token:
                 logger.warning(f"HuBMAP file requested without Globus token")
                 raise HTTPException(
