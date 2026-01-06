@@ -20,7 +20,7 @@ class HuBMAPSearchResult(BaseModel):
 
 def extract_uuid_from_persistent_id(persistent_id: str) -> Optional[str]:
     """
-    Extract UUID from HuBMAP persistent_id.
+    Extract UUID from HuBMAP persistent ID.
 
     Handles formats:
     - doi:10.35079/HBM123.ABCD.456

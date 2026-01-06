@@ -227,40 +227,6 @@ async def fetch_drs_object(
             raise Exception(f"Network error fetching DRS metadata: {e}")
 
 
-async def extract_globus_info(access_methods: List[DRSAccessMethod]) -> dict:
-    """
-    Extract Globus endpoint and path from access methods.
-
-    Args:
-        access_methods: List of DRS access methods
-
-    Returns:
-        Dict with "endpoint_id" and "path" keys
-
-    Raises:
-        ValueError: If no Globus access method found
-    """
-    for method in access_methods:
-        if method.type == "globus":
-            # Globus access_url format: globus://endpoint-uuid/path/to/file
-            if not method.access_url:
-                raise ValueError("Globus access method missing access_url")
-
-            parsed = urllib.parse.urlparse(str(method.access_url))
-            if parsed.scheme != "globus":
-                raise ValueError(f"Invalid Globus URL format: {method.access_url}")
-
-            endpoint_id = parsed.netloc
-            path = parsed.path
-
-            if not endpoint_id or not path:
-                raise ValueError(f"Invalid Globus URL format: {method.access_url}")
-
-            return {"endpoint_id": endpoint_id, "path": path}
-
-    raise ValueError("No Globus access method found")
-
-
 async def get_https_download_url(access_methods: List[DRSAccessMethod]) -> str:
     """
     Extract HTTPS download URL from access methods.
