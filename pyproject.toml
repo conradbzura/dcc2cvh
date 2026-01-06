@@ -12,9 +12,11 @@ classifiers = [
 dependencies = [
     "aiohttp",
     "click",
+    "debugpy",
     "fastapi",
     "motor",
     "pymongo",
+    "requests",
     "strawberry-graphql",
     "uvicorn",
     "wool",
