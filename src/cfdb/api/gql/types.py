@@ -1,9 +1,10 @@
+from typing import NewType, get_type_hints
+
 import strawberry
-from typing import NewType
 from bson import ObjectId
-from cfdb.models import FileMetadataModel
 from pydantic import BaseModel
-from typing import get_type_hints
+
+from cfdb.models import FileMetadataModel
 
 ObjectIdScalar = strawberry.scalar(
     NewType("ObjectIdScalar", str),
@@ -47,7 +48,9 @@ def annotate(model, name=None):
                     type.__annotations__[field_name] = field_type
             else:
                 try:
-                    if isinstance(field_type, type) and issubclass(field_type, BaseModel):
+                    if isinstance(field_type, type) and issubclass(
+                        field_type, BaseModel
+                    ):
                         T = build_strawberry_type(field_type)
                         type.__annotations__[field_name] = T
                 except TypeError:
@@ -56,7 +59,9 @@ def annotate(model, name=None):
                 if subtypes := getattr(field_type, "__args__", None):
                     for subtype in subtypes:
                         try:
-                            if isinstance(subtype, type) and issubclass(subtype, BaseModel):
+                            if isinstance(subtype, type) and issubclass(
+                                subtype, BaseModel
+                            ):
                                 T = build_strawberry_type(subtype)
 
                                 _T = field_type.__origin__[

@@ -20,5 +20,5 @@ api:
 	@echo "Building the API Docker image..."
 	docker build -t api -f Dockerfile.api .
 	@echo "Starting the API container..."
-	docker run -d --name api --network cvh-backend-network --network-alias cvh-backend -p 8000:8000 api
+	docker run -d --name api --network cvh-backend-network --network-alias cvh-backend -p 8000:8000 -e SYNC_API_KEY=$(SYNC_API_KEY) -e SYNC_DATA_DIR=$(SYNC_DATA_DIR) api
 	@echo "API container is up and running on port 8000 (http://0.0.0.0:8000/metadata)."

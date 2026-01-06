@@ -1,0 +1,241 @@
+"""Sync service for API-driven DCC metadata synchronization."""
+
+import asyncio
+import csv
+import logging
+import os
+from copy import copy
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import Enum
+from pathlib import Path
+from typing import Optional
+
+from cfdb import api
+from cfdb.dcc_registry import get_all_dcc_names, get_dcc_config, normalize_dcc_name
+from cfdb.downloader import cleanup_zip, download_file, extract_zip
+
+logger = logging.getLogger(__name__)
+
+BATCH_SIZE = 1000
+DATA_DIR = os.getenv("SYNC_DATA_DIR", ".data")
+
+
+class TaskStatus(str, Enum):
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+@dataclass
+class SyncTask:
+    id: str
+    dcc_names: list[str]
+    status: TaskStatus = TaskStatus.RUNNING
+    started_at: datetime = field(default_factory=datetime.utcnow)
+    completed_at: Optional[datetime] = None
+    progress: str = ""
+    error: Optional[str] = None
+    current_dcc: Optional[str] = None
+    current_step: Optional[str] = None
+
+
+# Module-level state
+_current_task: Optional[SyncTask] = None
+_sync_lock: asyncio.Lock = asyncio.Lock()
+
+
+def is_sync_running() -> bool:
+    """Check if a sync task is currently running."""
+    return _current_task is not None and _current_task.status == TaskStatus.RUNNING
+
+
+def get_current_task() -> Optional[SyncTask]:
+    """Get the currently running task, if any."""
+    return _current_task
+
+
+async def start_sync(task_id: str, dcc_names: list[str]) -> SyncTask:
+    """
+    Start a new sync task.
+
+    Args:
+        task_id: Unique identifier for this task
+        dcc_names: List of DCC names to sync (empty = all)
+
+    Returns:
+        The created SyncTask
+
+    Raises:
+        RuntimeError: If a sync is already running
+    """
+    global _current_task
+
+    async with _sync_lock:
+        if is_sync_running():
+            raise RuntimeError("A sync task is already running")
+
+        # Validate DCC names
+        valid_dccs = get_all_dcc_names()
+        if dcc_names:
+            for dcc in dcc_names:
+                normalized = normalize_dcc_name(dcc)
+                if normalized not in valid_dccs:
+                    raise ValueError(
+                        f"Unknown DCC '{dcc}'. Available: {', '.join(valid_dccs)}"
+                    )
+
+        normalized_names = (
+            [normalize_dcc_name(d) for d in dcc_names] if dcc_names else valid_dccs
+        )
+
+        task = SyncTask(id=task_id, dcc_names=normalized_names)
+        _current_task = task
+
+    # Run sync in background
+    asyncio.create_task(_run_sync(task))
+
+    return task
+
+
+async def _run_sync(task: SyncTask) -> None:
+    """Execute the sync task."""
+    global _current_task
+
+    try:
+        await _sync_dccs(task)
+        task.status = TaskStatus.COMPLETED
+        task.progress = "Sync completed successfully"
+    except Exception as e:
+        task.status = TaskStatus.FAILED
+        task.error = str(e)
+        logger.exception(f"Sync task {task.id} failed: {e}")
+    finally:
+        task.completed_at = datetime.utcnow()
+        task.current_dcc = None
+        task.current_step = None
+
+
+async def _sync_dccs(task: SyncTask) -> None:
+    """Core sync implementation for API."""
+    if api.db is None:
+        raise RuntimeError("Database not initialized")
+
+    data_path = Path(DATA_DIR)
+    data_path.mkdir(exist_ok=True)
+    downloads_path = data_path / "downloads"
+    downloads_path.mkdir(exist_ok=True)
+
+    for dcc in task.dcc_names:
+        task.current_dcc = dcc
+        config = get_dcc_config(dcc)
+
+        # Step 1: Download
+        task.current_step = "downloading"
+        task.progress = f"Downloading {dcc.upper()} datapackage..."
+        logger.info(task.progress)
+
+        url = config["latest_url"]
+        zip_filename = Path(url).name
+        zip_path = downloads_path / zip_filename
+
+        await download_file(url, zip_path, show_progress=False)
+
+        # Step 2: Extract
+        task.current_step = "extracting"
+        task.progress = f"Extracting {dcc.upper()} datapackage..."
+        logger.info(task.progress)
+
+        extract_dir = data_path / dcc
+        extract_zip(zip_path, extract_dir)
+
+        # Step 3 & 4: Clear + Load (CUTOVER - acquire mutex)
+        task.current_step = "cutover"
+        task.progress = f"Performing database cutover for {dcc.upper()}..."
+        logger.info(task.progress)
+
+        async with api.cutover_lock:
+            await _clear_dcc_data_async(dcc)
+            await _load_dataset_async(extract_dir, dcc)
+
+        # Step 5: Cleanup
+        task.current_step = "cleanup"
+        task.progress = f"Cleaning up {dcc.upper()}..."
+        logger.info(task.progress)
+
+        cleanup_zip(zip_path)
+
+        logger.info(f"{dcc.upper()} synced successfully")
+
+    task.progress = "All DCCs synced successfully"
+    logger.info(task.progress)
+
+
+async def _clear_dcc_data_async(submission: str) -> None:
+    """Clear DCC data using async Motor client."""
+    if api.db is None:
+        raise RuntimeError("Database not initialized")
+
+    collection_names = await api.db.list_collection_names()
+
+    for collection_name in collection_names:
+        try:
+            result = await api.db[collection_name].delete_many(
+                {"submission": submission}
+            )
+            if result.deleted_count > 0:
+                logger.info(
+                    f"Deleted {result.deleted_count} records from {collection_name}"
+                )
+        except Exception as e:
+            logger.warning(f"Failed to delete from {collection_name}: {e}")
+
+
+async def _load_dataset_async(directory: Path, submission: str) -> None:
+    """Load CSV/TSV files into MongoDB using async Motor client."""
+    if api.db is None:
+        raise RuntimeError("Database not initialized")
+
+    # Handle nested directories from ZIP extraction
+    # Look for CSV/TSV files, checking subdirectories if needed
+    files_to_load = [f for f in directory.iterdir() if f.suffix in (".csv", ".tsv")]
+
+    # If no files found at top level, check first non-junk subdirectory
+    if not files_to_load:
+        for subdir in directory.iterdir():
+            if subdir.is_dir() and not subdir.name.startswith("__"):
+                files_to_load = [
+                    f for f in subdir.iterdir() if f.suffix in (".csv", ".tsv")
+                ]
+                if files_to_load:
+                    break
+    logger.info(f"Loading {len(files_to_load)} files into database")
+
+    for filepath in files_to_load:
+        delimiter = "," if filepath.suffix == ".csv" else "\t"
+        table = filepath.stem
+
+        batch = []
+        count = 0
+
+        with open(filepath, "r", encoding="utf-8") as file:
+            reader = csv.DictReader(file, delimiter=delimiter)
+
+            for row in reader:
+                count += 1
+                record = {**row, "submission": submission, "table": table}
+
+                # Mark 4DN files as public
+                if submission == "4dn" and table == "file":
+                    record["data_access_level"] = "public"
+
+                batch.append(record)
+
+                if len(batch) >= BATCH_SIZE:
+                    await api.db[table].insert_many(copy(batch))
+                    batch.clear()
+
+            if batch:
+                await api.db[table].insert_many(copy(batch))
+
+        logger.info(f"Loaded {count} records into {table}")

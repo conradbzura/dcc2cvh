@@ -1,17 +1,19 @@
 """HuBMAP Search API integration for access level metadata."""
 
 import asyncio
+import logging
 import re
 from typing import Optional
-from pydantic import BaseModel
+
 import aiohttp
-import logging
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
 
 class HuBMAPSearchResult(BaseModel):
     """HuBMAP Search API entity result."""
+
     uuid: str
     status: Optional[str] = None
     data_access_level: Optional[str] = None
@@ -33,7 +35,7 @@ def extract_uuid_from_persistent_id(persistent_id: str) -> Optional[str]:
         return None
 
     # Try direct UUID pattern match
-    uuid_pattern = r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+    uuid_pattern = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
     match = re.search(uuid_pattern, persistent_id, re.IGNORECASE)
     if match:
         return match.group(0).lower()
@@ -58,8 +60,7 @@ async def fetch_access_metadata(uuid: str) -> Optional[HuBMAPSearchResult]:
     async with aiohttp.ClientSession() as session:
         try:
             async with session.get(
-                search_url,
-                timeout=aiohttp.ClientTimeout(total=10)
+                search_url, timeout=aiohttp.ClientTimeout(total=10)
             ) as response:
                 if response.status == 200:
                     data = await response.json()
@@ -67,7 +68,7 @@ async def fetch_access_metadata(uuid: str) -> Optional[HuBMAPSearchResult]:
                         uuid=data.get("uuid", uuid),
                         status=data.get("status"),
                         data_access_level=data.get("data_access_level"),
-                        entity_type=data.get("entity_type")
+                        entity_type=data.get("entity_type"),
                     )
                 elif response.status == 404:
                     logger.debug(f"HuBMAP entity not found: {uuid}")

@@ -14,7 +14,6 @@ from pymongo import MongoClient
 
 from cfdb.mongo import PIPELINE
 
-
 BATCH_SIZE: Final = 1000
 
 __client__ = None

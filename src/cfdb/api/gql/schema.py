@@ -1,17 +1,19 @@
-import strawberry
+import pprint
 from typing import List, Optional
-from cfdb.api.gql.types import (
-    ObjectIdScalar,
-    FileMetadataType,
-)
+
+import strawberry
+
+from cfdb import api
 from cfdb.api.gql.inputs import (
     FileMetadataInput,
     to_dict,
     to_query,
 )
+from cfdb.api.gql.types import (
+    FileMetadataType,
+    ObjectIdScalar,
+)
 from cfdb.models import FileMetadataModel
-from cfdb import api
-import pprint
 
 
 def from_pydantic(gql_type, obj):
@@ -44,6 +46,10 @@ class Query:
         page: int = 0,
         page_size: int = api.PAGE_SIZE,
     ) -> List[FileMetadataType]:
+        # Wait for any database cutover to complete
+        async with api.cutover_lock:
+            pass
+
         assert api.db is not None
         query = to_query(to_dict(input)) if input else {}
         print(pprint.pformat(query))
@@ -62,6 +68,10 @@ class Query:
     async def file(
         self, _: strawberry.Info, id: ObjectIdScalar
     ) -> Optional[FileMetadataType]:
+        # Wait for any database cutover to complete
+        async with api.cutover_lock:
+            pass
+
         assert api.db is not None
         file = await api.db.files.find_one({"_id": id})
         if file:

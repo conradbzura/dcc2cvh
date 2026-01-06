@@ -1,11 +1,12 @@
 """Data Repository Service (DRS) integration for file streaming."""
 
 import asyncio
-import urllib.parse
-from typing import Optional, AsyncGenerator, List
-from pydantic import BaseModel, HttpUrl
-import aiohttp
 import logging
+import urllib.parse
+from typing import AsyncGenerator, List, Optional
+
+import aiohttp
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +56,9 @@ async def parse_drs_uri(drs_uri: str) -> tuple:
     parsed = urllib.parse.urlparse(drs_uri)
 
     if parsed.scheme != "drs":
-        raise ValueError(f"Invalid DRS URI: must start with drs://, got {parsed.scheme}://")
+        raise ValueError(
+            f"Invalid DRS URI: must start with drs://, got {parsed.scheme}://"
+        )
 
     hostname = parsed.netloc
     object_id = parsed.path.lstrip("/")
@@ -152,10 +155,7 @@ def parse_range_header(range_header: str, file_size: int) -> tuple[int, int, int
     return start, end, content_length
 
 
-async def fetch_drs_object(
-    drs_uri: str,
-    auth_token: Optional[str] = None
-) -> DRSObject:
+async def fetch_drs_object(drs_uri: str, auth_token: Optional[str] = None) -> DRSObject:
     """
     Fetch DRS object metadata from GA4GH DRS API.
 
@@ -197,7 +197,9 @@ async def fetch_drs_object(
                         # Normalize access_url - it can be a string or a dict with "url" key
                         method_copy = method_data.copy()
                         if isinstance(method_copy.get("access_url"), dict):
-                            method_copy["access_url"] = method_copy["access_url"].get("url")
+                            method_copy["access_url"] = method_copy["access_url"].get(
+                                "url"
+                            )
                         access_methods.append(DRSAccessMethod(**method_copy))
 
                     return DRSObject(
@@ -250,9 +252,7 @@ async def get_https_download_url(access_methods: List[DRSAccessMethod]) -> str:
 
 
 async def stream_from_url(
-    url: str,
-    auth_headers: Optional[dict] = None,
-    range_header: Optional[str] = None
+    url: str, range_header: Optional[str] = None
 ) -> AsyncGenerator[bytes, None]:
     """
     Stream file bytes from HTTPS URL with optional Range request support.
@@ -268,7 +268,7 @@ async def stream_from_url(
     Raises:
         Exception: On download errors
     """
-    headers = auth_headers.copy() if auth_headers else {}
+    headers = {}
 
     # Add Range header if provided
     if range_header:
@@ -277,7 +277,9 @@ async def stream_from_url(
     async with aiohttp.ClientSession() as session:
         try:
             async with session.get(
-                url, headers=headers, timeout=aiohttp.ClientTimeout(total=None, connect=30)
+                url,
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=None, connect=30),
             ) as response:
                 # Accept 200 (full file) or 206 (partial content)
                 if response.status not in (200, 206):

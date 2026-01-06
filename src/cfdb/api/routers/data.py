@@ -1,17 +1,18 @@
 """REST API router for streaming files from DCCs."""
 
+import logging
+from typing import Optional
+
 from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import StreamingResponse
-from typing import Optional
-import logging
 
 from cfdb import api
+from cfdb.models import FileMetadataModel
 from cfdb.services import drs
 from cfdb.services.hubmap import (
-    fetch_access_metadata,
     extract_uuid_from_persistent_id,
+    fetch_access_metadata,
 )
-from cfdb.models import FileMetadataModel
 
 logger = logging.getLogger(__name__)
 
@@ -45,9 +46,13 @@ async def stream_file(dcc: str, local_id: str, range: Optional[str] = Header(Non
         502: Upstream service error
         504: Service timeout
     """
+    # Wait for any database cutover to complete before proceeding
+    async with api.cutover_lock:
+        pass
+
     try:
         # 1. Validate and normalize DCC name
-        from cfdb.dcc_registry import normalize_dcc_name, get_all_dcc_names
+        from cfdb.dcc_registry import get_all_dcc_names, normalize_dcc_name
 
         normalized_dcc = normalize_dcc_name(dcc)
         valid_dccs = get_all_dcc_names()
@@ -121,9 +126,11 @@ async def stream_file(dcc: str, local_id: str, range: Optional[str] = Header(Non
             @dataclass
             class MinimalMetadata:
                 access_url: str
+                filename: str
 
-            file_metadata = MinimalMetadata(access_url=access_url)
-            file_metadata.filename = file_doc.get("filename", "file")
+            file_metadata = MinimalMetadata(
+                access_url=access_url, filename=file_doc.get("filename", "file")
+            )
 
         # 3. Check if file has access_url
         if not file_metadata.access_url:
@@ -243,10 +250,6 @@ async def stream_file(dcc: str, local_id: str, range: Optional[str] = Header(Non
                 )
                 logger.info(f"Streaming HTTPS file: {drs_object.name}")
 
-                auth_headers = None
-                if authorization:
-                    auth_headers = {"Authorization": authorization}
-
                 # Prepare response headers
                 response_headers = {
                     "Content-Disposition": f'attachment; filename="{drs_object.name or "file"}"',
@@ -307,9 +310,7 @@ async def stream_file(dcc: str, local_id: str, range: Optional[str] = Header(Non
                         )
 
                 # Stream file (with or without range)
-                chunk_gen = drs.stream_from_url(
-                    download_url, auth_headers, range_header_to_send
-                )
+                chunk_gen = drs.stream_from_url(download_url, range_header_to_send)
 
                 # Set Content-Type from DRS metadata
                 media_type = drs_object.mime_type or "application/octet-stream"

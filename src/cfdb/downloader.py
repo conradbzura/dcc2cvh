@@ -5,7 +5,6 @@ import logging
 import shutil
 import zipfile
 from pathlib import Path
-from typing import Optional, Callable
 
 import aiohttp
 import click
@@ -16,7 +15,7 @@ async def download_file(
     destination: Path,
     show_progress: bool = True,
     max_retries: int = 3,
-) -> Path:
+):
     """
     Download a file from URL with progress indication and retry logic.
 
@@ -80,7 +79,7 @@ async def download_file(
 
         except (aiohttp.ClientError, OSError) as e:
             if attempt < max_retries - 1:
-                wait_time = 2 ** attempt
+                wait_time = 2**attempt
                 logging.warning(
                     f"Download failed (attempt {attempt + 1}/{max_retries}), "
                     f"retrying in {wait_time}s: {e}"
