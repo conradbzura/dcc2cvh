@@ -95,37 +95,7 @@ async def close_aiohttp_session():
 def cli(): ...
 
 
-@cli.group("c2m2")
-def c2m2(): ...
-
-
-@c2m2.command("load-dataset")
-@click.argument(
-    "directory",
-    type=click.Path(exists=True, file_okay=False, dir_okay=True),
-)
-@click.option(
-    "--debug",
-    "-d",
-    callback=debug,
-    expose_value=False,
-    help="Run with debugger listening on the specified port. Execution will block until the debugger is attached.",
-    is_eager=True,
-    type=int,
-)
-def load_c2m2_dataset(directory: os.PathLike):
-    """
-    Reads and processes a CFDE datapackage.
-
-    This command processes all `.csv` and `.tsv` files in the specified directory,
-    reads their contents, and pushes the data to a MongoDB database.
-
-    DIRECTORY is the path to the directory containing the CFDE datapackage.
-    """
-    asyncio.get_event_loop().run_until_complete(_load_c2m2_dataset(directory, "c2m2-2"))
-
-
-async def _load_c2m2_dataset(directory: os.PathLike, db_name: str = "c2m2"):
+async def _load_cfdb_dataset(directory: os.PathLike, db_name: str = "cfdb"):
     logging.debug(f"Loading directory: {directory} into database: {db_name}")
     try:
         tasks = []
@@ -185,7 +155,7 @@ async def _load_c2m2_dataset(directory: os.PathLike, db_name: str = "c2m2"):
 
 
 async def persist(
-    filepath, delimiter, db_name: str = "c2m2", fetch_drs_metadata: bool = False
+    filepath, delimiter, db_name: str = "cfdb", fetch_drs_metadata: bool = False
 ):
     """
     Persist records from a CSV/TSV file to MongoDB.
@@ -220,10 +190,12 @@ async def persist(
                     record["data_access_level"] = "public"
 
                 batch.append(record)
-                if fetch_drs_metadata and table == "file" and record.get("access_url"):
-                    metadata_task = asyncio.create_task(
-                        get_file_metadata(record["access_url"])
-                    )
+                if (
+                    fetch_drs_metadata
+                    and table == "file"
+                    and (access_url := record.get("access_url"))
+                ):
+                    metadata_task = asyncio.create_task(get_file_metadata(access_url))
                     # Track index in batch and the metadata task
                     metadata_tasks.append((len(batch) - 1, metadata_task))
                 if len(batch) >= BATCH_SIZE:
@@ -321,9 +293,9 @@ def aggregate(db):
     yield from db.file.aggregate(PIPELINE)
 
 
-@c2m2.command
+@cli.command
 def create_files_view():
-    db = get_client()["c2m2-backup"]
+    db = get_client()["cfdb-backup"]
     db.drop_collection("files")
     db.command(
         "create",
@@ -363,12 +335,12 @@ def clear_dcc_data(db_name: str, submission: str):
             )
 
 
-@c2m2.command("sync")
+@cli.command("sync")
 @click.argument("dcc_names", nargs=-1, required=False)
 @click.option("--backup", is_flag=True, help="Backup existing data before syncing")
 @click.option("--keep-downloads", is_flag=True, help="Keep downloaded ZIP files")
 @click.option("--data-dir", default=".data", type=click.Path(), help="Data directory")
-@click.option("--db-name", default="c2m2", help="MongoDB database name")
+@click.option("--db-name", default="cfdb", help="MongoDB database name")
 @click.option(
     "--debug",
     "-d",
@@ -394,11 +366,11 @@ def sync(
 
     Examples:
 
-        cfdb c2m2 sync
+        cfdb cfdb sync
 
-        cfdb c2m2 sync 4dn
+        cfdb cfdb sync 4dn
 
-        cfdb c2m2 sync 4dn hubmap --backup
+        cfdb cfdb sync 4dn hubmap --backup
     """
     asyncio.get_event_loop().run_until_complete(
         _sync_dccs(dcc_names, backup, keep_downloads, data_dir, db_name)
@@ -498,7 +470,7 @@ async def _sync_dccs(
             # 5. Load into MongoDB
             click.echo(f"Loading data into {db_name} database...")
             try:
-                await _load_c2m2_dataset(extract_dir, db_name)
+                await _load_cfdb_dataset(extract_dir, db_name)
             except Exception as e:
                 click.echo(f"Error: Failed to load data into MongoDB: {e}", err=True)
                 raise

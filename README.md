@@ -24,13 +24,13 @@ This will start a container running MongoDB listening on port 27017 and the Grap
 Ensure that both Docker is installed on your system and properly configured before running this command.
 
 ## Using the CLI
-The package provides a CLI command `load-dataset` under the command group `c2m2` to process and load CFDE datapackages into MongoDB.
+The package provides a CLI command `load-dataset` under the command group `cfdb` to process and load CFDE datapackages into MongoDB.
 
 ### Command: `load-dataset`
 
 #### Usage
 ```bash
-cfdb c2m2 load-dataset DIRECTORY
+cfdb cfdb load-dataset DIRECTORY
 ```
 
 #### Arguments
