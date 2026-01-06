@@ -8,4 +8,4 @@ RUN pip install uvicorn
 RUN useradd app
 USER app
 WORKDIR /app/src
-CMD ["uvicorn", "dcc2cvh.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "cfdb.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

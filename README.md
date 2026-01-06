@@ -1,13 +1,13 @@
-# dcc2cvh
+# cfdb
 
 ## Overview
-`dcc2cvh` is a Python package designed to process CFDE and ENCODE datapackages and push the data to a MongoDB database. It provides a CLI tool for reading `.csv` and `.tsv` files from a specified directory and loading them into MongoDB.
+`cfdb` is a Python package designed to process CFDE and ENCODE datapackages and push the data to a MongoDB database. It provides a CLI tool for reading `.csv` and `.tsv` files from a specified directory and loading them into MongoDB.
 
 ## Installation
 To install the package from GitHub, use the following command:
 
 ```bash
-pip install git+https://github.com/conradbzura/dcc2cvh.git
+pip install git+https://github.com/conradbzura/cfdb.git
 ```
 
 ## Starting MongoDB
@@ -30,7 +30,7 @@ The package provides a CLI command `load-dataset` under the command group `c2m2`
 
 #### Usage
 ```bash
-dcc2cvh c2m2 load-dataset DIRECTORY
+cfdb c2m2 load-dataset DIRECTORY
 ```
 
 #### Arguments

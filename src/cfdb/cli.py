@@ -12,7 +12,7 @@ import aiohttp
 import click
 from pymongo import MongoClient
 
-from dcc2cvh.mongo import PIPELINE
+from cfdb.mongo import PIPELINE
 
 
 BATCH_SIZE: Final = 1000
@@ -394,11 +394,11 @@ def sync(
 
     Examples:
 
-        dcc2cvh c2m2 sync
+        cfdb c2m2 sync
 
-        dcc2cvh c2m2 sync 4dn
+        cfdb c2m2 sync 4dn
 
-        dcc2cvh c2m2 sync 4dn hubmap --backup
+        cfdb c2m2 sync 4dn hubmap --backup
     """
     asyncio.get_event_loop().run_until_complete(
         _sync_dccs(dcc_names, backup, keep_downloads, data_dir, db_name)
@@ -423,12 +423,12 @@ async def _sync_dccs(
     import shutil
     from pathlib import Path
 
-    from dcc2cvh.dcc_registry import (
+    from cfdb.dcc_registry import (
         get_all_dcc_names,
         get_dcc_config,
         normalize_dcc_name,
     )
-    from dcc2cvh.downloader import cleanup_zip, download_file, extract_zip
+    from cfdb.downloader import cleanup_zip, download_file, extract_zip
 
     try:
         data_path = Path(data_dir)

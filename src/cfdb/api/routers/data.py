@@ -5,13 +5,13 @@ from fastapi.responses import StreamingResponse
 from typing import Optional
 import logging
 
-from dcc2cvh import api
-from dcc2cvh.services import drs
-from dcc2cvh.services.hubmap import (
+from cfdb import api
+from cfdb.services import drs
+from cfdb.services.hubmap import (
     fetch_access_metadata,
     extract_uuid_from_persistent_id,
 )
-from dcc2cvh.models import FileMetadataModel
+from cfdb.models import FileMetadataModel
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ async def stream_file(dcc: str, local_id: str, range: Optional[str] = Header(Non
     """
     try:
         # 1. Validate and normalize DCC name
-        from dcc2cvh.dcc_registry import normalize_dcc_name, get_all_dcc_names
+        from cfdb.dcc_registry import normalize_dcc_name, get_all_dcc_names
 
         normalized_dcc = normalize_dcc_name(dcc)
         valid_dccs = get_all_dcc_names()

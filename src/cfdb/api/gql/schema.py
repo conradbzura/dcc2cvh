@@ -1,16 +1,16 @@
 import strawberry
 from typing import List, Optional
-from dcc2cvh.api.gql.types import (
+from cfdb.api.gql.types import (
     ObjectIdScalar,
     FileMetadataType,
 )
-from dcc2cvh.api.gql.inputs import (
+from cfdb.api.gql.inputs import (
     FileMetadataInput,
     to_dict,
     to_query,
 )
-from dcc2cvh.models import FileMetadataModel
-from dcc2cvh import api
+from cfdb.models import FileMetadataModel
+from cfdb import api
 import pprint
 
 

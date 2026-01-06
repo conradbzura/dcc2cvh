@@ -22,7 +22,7 @@ dependencies = [
 description = "A Python utility for parsing and normalizing various DCC datapackages."
 dynamic = ["version"]
 license = { text = "MIT License" }
-name = "dcc2cvh"
+name = "cfdb"
 readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.10"
 
@@ -30,7 +30,7 @@ requires-python = ">=3.10"
 dev = ["debugpy", "ruff"]
 
 [project.scripts]
-dcc2cvh = "dcc2cvh.cli:cli"
+cfdb = "cfdb.cli:cli"
 
 [tool.pytest.ini_options]
 addopts = ["--import-mode=importlib"]
