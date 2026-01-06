@@ -5,13 +5,13 @@ from fastapi.responses import StreamingResponse
 from typing import Optional
 import logging
 
-from dcc2cvh.cvh import api
-from dcc2cvh.cvh.services import drs
-from dcc2cvh.cvh.services.hubmap import (
+from dcc2cvh import api
+from dcc2cvh.services import drs
+from dcc2cvh.services.hubmap import (
     fetch_access_metadata,
     extract_uuid_from_persistent_id,
 )
-from dcc2cvh.cvh.models import FileMetadataModel
+from dcc2cvh.models import FileMetadataModel
 
 logger = logging.getLogger(__name__)
 

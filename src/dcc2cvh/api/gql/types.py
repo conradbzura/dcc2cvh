@@ -1,7 +1,7 @@
 import strawberry
 from typing import NewType
 from bson import ObjectId
-from dcc2cvh.cvh.models import FileMetadataModel
+from dcc2cvh.models import FileMetadataModel
 from pydantic import BaseModel
 from typing import get_type_hints
 

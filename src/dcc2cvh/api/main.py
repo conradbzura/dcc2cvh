@@ -1,9 +1,9 @@
 from motor.motor_asyncio import AsyncIOMotorClient
 from fastapi import FastAPI
 from strawberry.fastapi import GraphQLRouter
-from dcc2cvh.cvh.api.gql.schema import schema
-from dcc2cvh.cvh import api
-from dcc2cvh.cvh.api.routers.data import router as data_router
+from dcc2cvh.api.gql.schema import schema
+from dcc2cvh import api
+from dcc2cvh.api.routers.data import router as data_router
 from contextlib import asynccontextmanager
 
 
