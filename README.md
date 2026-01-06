@@ -1,37 +1,494 @@
-# cfdb
+# CFDB
 
-## Overview
-`cfdb` is a Python package designed to process CFDE and ENCODE datapackages and push the data to a MongoDB database. It provides a CLI tool for reading `.csv` and `.tsv` files from a specified directory and loading them into MongoDB.
+A Python package for querying and serving C2M2 (Crosscut Metadata Model) file metadata from Common Fund Data Coordinating Centers (DCCs).
 
 ## Installation
-To install the package from GitHub, use the following command:
 
 ```bash
 pip install git+https://github.com/conradbzura/cfdb.git
 ```
 
-## Starting MongoDB
-This project includes a `Makefile` to simplify building and starting MongoDB and the API. To start MongoDB, run:
+Requires Python 3.10 or later.
+
+## Setup
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `SYNC_API_KEY` | API key for the sync endpoint (required for sync operations) | - |
+| `SYNC_DATA_DIR` | Directory for downloaded sync data files | - |
+| `CFDB_API_URL` | Base URL for the cfdb API | `http://localhost:8000` |
+
+### Docker Setup
+
+Start MongoDB and the API using the provided Makefile:
 
 ```bash
+# Set required environment variables
+export SYNC_API_KEY=your-api-key
+export SYNC_DATA_DIR=/path/to/sync/data
+
+# Start MongoDB with sample data
 make mongodb
+
+# Start the API server
 make api
 ```
 
-This will start a container running MongoDB listening on port 27017 and the GraphQL API listening on port 8000.
+This starts:
+- MongoDB on port 27017
+- GraphQL/REST API on port 8000
 
-> [!NOTE]
-Ensure that both Docker is installed on your system and properly configured before running this command.
+## API Usage
 
-## Using the CLI
-The package provides a CLI command `load-dataset` under the command group `cfdb` to process and load CFDE datapackages into MongoDB.
+### GraphQL Endpoint
 
-### Command: `load-dataset`
+**URL:** `POST /metadata`
 
-#### Usage
-```bash
-cfdb cfdb load-dataset DIRECTORY
+Query file metadata using GraphQL. The API exposes two queries:
+
+#### `files` Query
+
+Returns a paginated list of files matching the input criteria.
+
+```graphql
+query {
+  files(
+    input: [FileMetadataInput]
+    page: Int = 0
+    pageSize: Int = 100
+  ) {
+    idNamespace
+    localId
+    filename
+    sizeInBytes
+    dcc {
+      dccAbbreviation
+      dccName
+    }
+    fileFormat {
+      name
+    }
+    collections {
+      name
+      biosamples {
+        anatomy {
+          name
+        }
+      }
+    }
+  }
+}
 ```
 
-#### Arguments
-- `DIRECTORY`: The path to the directory containing the CFDE datapackage. This directory should contain `.csv` or `.tsv` files.
+```bash
+# Query all files (first page)
+curl -X POST http://localhost:8000/metadata \
+  -H "Content-Type: application/json" \
+  -d '{"query": "{ files { filename sizeInBytes dcc { dccAbbreviation } } }"}'
+
+# Query files with pagination
+curl -X POST http://localhost:8000/metadata \
+  -H "Content-Type: application/json" \
+  -d '{"query": "{ files(page: 0, pageSize: 10) { filename } }"}'
+
+# Query files from a specific DCC
+curl -X POST http://localhost:8000/metadata \
+  -H "Content-Type: application/json" \
+  -d '{"query": "{ files(input: [{ dcc: [{ dccAbbreviation: [\"4DN\"] }] }]) { filename dcc { dccAbbreviation } } }"}'
+```
+
+#### `file` Query
+
+Returns a single file by its MongoDB ObjectId.
+
+```graphql
+query {
+  file(id: "507f1f77bcf86cd799439011") {
+    filename
+    accessUrl
+  }
+}
+```
+
+```bash
+curl -X POST http://localhost:8000/metadata \
+  -H "Content-Type: application/json" \
+  -d '{"query": "{ file(id: \"507f1f77bcf86cd799439011\") { filename accessUrl } }"}'
+```
+
+#### Data Model
+
+The API serves file metadata following the C2M2 data model. Below is the complete schema.
+
+##### FileMetadataModel
+
+The central entity representing a stable digital asset.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id_namespace` | string | CFDE-cleared identifier for the top-level data space (PK part 1) |
+| `local_id` | string | Identifier unique within the namespace (PK part 2) |
+| `dcc` | DCC | The Data Coordinating Center that produced this file |
+| `collections` | Collection[] | Collections containing this file |
+| `project_id_namespace` | string | Project namespace (FK part 1) |
+| `project_local_id` | string | Project local ID (FK part 2) |
+| `persistent_id` | string? | Permanent URI or compact ID |
+| `creation_time` | string? | ISO 8601 timestamp |
+| `size_in_bytes` | int? | File size |
+| `sha256` | string? | SHA-256 checksum (preferred) |
+| `md5` | string? | MD5 checksum (if SHA-256 unavailable) |
+| `filename` | string | Filename without path |
+| `file_format` | FileFormat? | EDAM CV term for digital format |
+| `compression_format` | string? | EDAM CV term for compression (e.g., gzip) |
+| `data_type` | DataType? | EDAM CV term for data type |
+| `assay_type` | AssayType? | OBI CV term for experiment type |
+| `analysis_type` | string? | OBI CV term for analysis type |
+| `mime_type` | string? | MIME type |
+| `bundle_collection_id_namespace` | string? | Bundle collection namespace |
+| `bundle_collection_local_id` | string? | Bundle collection local ID |
+| `dbgap_study_id` | string? | dbGaP study ID for access control |
+| `access_url` | string? | DRS URI or publicly accessible URL |
+
+##### DCC
+
+A Common Fund program or Data Coordinating Center.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | CFDE-CC issued identifier |
+| `dcc_name` | string | Human-readable label |
+| `dcc_abbreviation` | string | Short display label |
+| `dcc_description` | string? | Human-readable description |
+| `contact_email` | string | Primary technical contact email |
+| `contact_name` | string | Primary technical contact name |
+| `dcc_url` | string | DCC website URL |
+| `project_id_namespace` | string | Project namespace |
+| `project_local_id` | string | Project local ID |
+
+##### Collection
+
+A grouping of files, biosamples, and/or subjects.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id_namespace` | string | Collection namespace (PK part 1) |
+| `local_id` | string | Collection local ID (PK part 2) |
+| `biosamples` | Biosample[] | Biosamples in this collection |
+| `persistent_id` | string? | Permanent URI |
+| `creation_time` | string? | ISO 8601 timestamp |
+| `abbreviation` | string? | Short display label |
+| `name` | string | Human-readable label |
+| `description` | string? | Human-readable description |
+
+##### Biosample
+
+A tissue sample or other physical specimen.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id_namespace` | string | Biosample namespace (PK part 1) |
+| `local_id` | string | Biosample local ID (PK part 2) |
+| `project_id_namespace` | string | Project namespace (FK part 1) |
+| `project_local_id` | string | Project local ID (FK part 2) |
+| `persistent_id` | string? | Permanent URI |
+| `creation_time` | string? | ISO 8601 timestamp |
+| `sample_prep_method` | string? | OBI CV term for preparation method |
+| `anatomy` | Anatomy? | UBERON CV term for anatomical origin |
+| `biofluid` | string? | UBERON/InterLex term for fluid origin |
+
+##### Anatomy
+
+An UBERON (Uber-anatomy ontology) CV term.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | UBERON CV term identifier |
+| `name` | string | Human-readable label |
+| `description` | string? | Human-readable description |
+
+##### FileFormat
+
+An EDAM CV 'format:' term describing digital format.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | EDAM format term identifier |
+| `name` | string | Human-readable label |
+| `description` | string? | Human-readable description |
+
+##### DataType
+
+An EDAM CV 'data:' term describing the type of data.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | EDAM data term identifier |
+| `name` | string | Human-readable label |
+| `description` | string? | Human-readable description |
+
+##### AssayType
+
+An OBI (Ontology for Biomedical Investigations) CV term describing experiment types.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | OBI CV term identifier |
+| `name` | string | Human-readable label |
+| `description` | string? | Human-readable description |
+
+#### Query Mechanics
+
+The GraphQL API uses an implicit OR/AND clause system for building MongoDB queries.
+
+**How It Works:**
+
+1. **Lists become OR clauses**: Multiple values in an array are combined with `$or`
+2. **Dict keys become AND clauses**: Multiple fields in an object are combined with `$and`
+
+##### Simple Query - Single Value
+
+```graphql
+query {
+  files(input: [{ filename: ["data.csv"] }]) {
+    filename
+  }
+}
+```
+
+MongoDB query:
+```json
+{ "filename": "data.csv" }
+```
+
+##### OR Query - Multiple Values in a List
+
+Find files with either filename:
+
+```graphql
+query {
+  files(input: [{ filename: ["data.csv", "results.tsv"] }]) {
+    filename
+  }
+}
+```
+
+MongoDB query:
+```json
+{ "$or": [{ "filename": "data.csv" }, { "filename": "results.tsv" }] }
+```
+
+##### AND Query - Multiple Fields
+
+Find files matching both criteria:
+
+```graphql
+query {
+  files(input: [{
+    filename: "data.csv",
+    dcc: { dccAbbreviation: ["4DN"] }
+  }]) {
+    filename
+    dcc { dccAbbreviation }
+  }
+}
+```
+
+MongoDB query:
+```json
+{
+  "$and": [
+    { "filename": "data.csv" },
+    { "dcc.dcc_abbreviation": "4DN" }
+  ]
+}
+```
+
+##### Combined OR/AND Query
+
+Find files from 4DN OR HuBMAP with specific file formats:
+
+```graphql
+query {
+  files(input: [{
+    dcc: [
+      { dccAbbreviation: ["4DN"] },
+      { dccAbbreviation: ["HuBMAP"] }
+    ],
+    fileFormat: { name: "FASTQ" }
+  }]) {
+    filename
+    dcc { dccAbbreviation }
+    fileFormat { name }
+  }
+}
+```
+
+MongoDB query:
+```json
+{
+  "$and": [
+    { "$or": [
+      { "dcc.dcc_abbreviation": "4DN" },
+      { "dcc.dcc_abbreviation": "HuBMAP" }
+    ]},
+    { "file_format.name": "FASTQ" }
+  ]
+}
+```
+
+##### Nested Entity Query
+
+Find files from biosamples with specific anatomy:
+
+```graphql
+query {
+  files(input: [{
+    collections: {
+      biosamples: {
+        anatomy: { name: "heart" }
+      }
+    }
+  }]) {
+    filename
+    collections {
+      biosamples {
+        anatomy { name }
+      }
+    }
+  }
+}
+```
+
+##### Pagination
+
+Use `page` and `pageSize` parameters:
+
+```graphql
+query {
+  files(page: 0, pageSize: 50) {
+    filename
+  }
+}
+```
+
+#### Entity Relationships
+
+The data model uses MongoDB aggregation pipelines to join related entities:
+
+```
+file
+├── dcc (DCC) ─────────────────── via submission field
+├── file_format (FileFormat) ──── via file_format ID
+├── data_type (DataType) ──────── via data_type ID
+├── assay_type (AssayType) ────── via assay_type ID
+└── collections[] (Collection)
+    └── biosamples[] (Biosample)
+        └── anatomy (Anatomy) ─── via anatomy ID
+```
+
+Files are linked to collections through a `file_in_collection` cross-reference table, and biosamples are linked to collections through a `biosample_in_collection` cross-reference table.
+
+### GraphiQL IDE
+
+**URL:** `GET /metadata`
+
+Visit [http://localhost:8000/metadata](http://localhost:8000/metadata) in your browser to access GraphiQL, an interactive IDE for exploring and testing GraphQL queries.
+
+Features:
+- **Schema Documentation** - Browse all available types, fields, and their descriptions
+- **Query Editor** - Write queries with syntax highlighting and error detection
+- **Autocomplete** - Get field suggestions as you type (Ctrl+Space)
+- **Query History** - Access previously executed queries
+- **Response Viewer** - See formatted JSON results
+
+### File Streaming Endpoint
+
+**URL:** `GET /data/{dcc}/{local_id}`
+
+Stream file contents from DCCs via HTTPS.
+
+**Path Parameters:**
+- `dcc` - DCC abbreviation (e.g., `4dn`, `hubmap`) - case insensitive
+- `local_id` - The file's unique ID within the DCC
+
+**Headers:**
+- `Range` (optional) - Supports `bytes=start-end` for partial content requests
+
+**Response Codes:**
+| Code | Description |
+|------|-------------|
+| 200 | Full file content |
+| 206 | Partial content (Range request) |
+| 400 | Invalid DCC or Range header |
+| 403 | File requires authentication (consortium/protected access) |
+| 404 | File not found |
+| 501 | No supported access method (e.g., Globus-only files) |
+| 502 | Upstream service error |
+| 504 | Service timeout |
+
+**Example:**
+
+```bash
+# Download a 4DN file
+curl -O http://localhost:8000/data/4dn/abc123
+
+# Download with Range header
+curl -H "Range: bytes=0-1023" http://localhost:8000/data/hubmap/xyz789
+```
+
+### Sync Endpoint
+
+**URL:** `POST /sync`
+
+Trigger a sync of C2M2 datapackages from DCCs. Requires API key authentication.
+
+**Headers:**
+- `X-API-Key` (required) - API key matching `SYNC_API_KEY` environment variable
+
+**Query Parameters:**
+- `dccs` (optional, repeatable) - DCC names to sync. If omitted, syncs all DCCs.
+
+**Response Codes:**
+| Code | Description |
+|------|-------------|
+| 202 | Sync started successfully |
+| 401 | Invalid API key |
+| 409 | A sync is already in progress |
+| 500 | Server configuration error |
+
+**Example:**
+
+```bash
+# Sync all DCCs
+curl -X POST -H "X-API-Key: your-key" http://localhost:8000/sync
+
+# Sync specific DCCs
+curl -X POST -H "X-API-Key: your-key" "http://localhost:8000/sync?dccs=4dn&dccs=hubmap"
+```
+
+## CLI Usage
+
+### `cfdb sync`
+
+Trigger a sync via the cfdb API.
+
+```bash
+# Sync all DCCs
+cfdb sync
+
+# Sync specific DCCs
+cfdb sync 4dn hubmap
+
+# Specify API URL
+cfdb sync --api-url http://api.example.com 4dn
+
+# Specify API key (or set SYNC_API_KEY env var)
+cfdb sync --api-key your-key
+```
+
+**Options:**
+- `--api-url` - cfdb API base URL (default: `http://localhost:8000`, env: `CFDB_API_URL`)
+- `--api-key` - API key for sync endpoint (env: `SYNC_API_KEY`)
+- `--debug` / `-d` - Enable debugpy debugging
