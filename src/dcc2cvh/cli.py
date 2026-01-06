@@ -214,6 +214,11 @@ async def persist(
             for row in reader:
                 count += 1
                 record = {**row, "submission": directory, "table": table}
+
+                # Mark 4DN files as public
+                if directory == "4dn" and table == "file":
+                    record["data_access_level"] = "public"
+
                 batch.append(record)
                 if fetch_drs_metadata and table == "file" and record.get("access_url"):
                     metadata_task = asyncio.create_task(
