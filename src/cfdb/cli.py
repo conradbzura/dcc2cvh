@@ -61,7 +61,7 @@ def create_files_view():
     "--api-url",
     default="http://localhost:8000",
     envvar="CFDB_API_URL",
-    help="cfdb API base URL",
+    help="CFDB API base URL",
 )
 @click.option(
     "--api-key",
@@ -79,9 +79,9 @@ def create_files_view():
 )
 def sync(dcc_names: tuple[str, ...], api_url: str, api_key: str):
     """
-    Trigger C2M2 datapackage sync via cfdb API.
+    Trigger C2M2 datapackage sync via CFDB API.
 
-    If no DCC_NAMES are specified, all supported DCCs will be synced.
+    If no DDC names are specified, all supported DCCs will be synced.
 
     DCC_NAMES: Zero or more DCC names (4dn, hubmap). If omitted, all DCCs are synced.
 
