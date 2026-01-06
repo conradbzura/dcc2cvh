@@ -14,6 +14,7 @@ from typing import Optional
 from cfdb import api
 from cfdb.dcc_registry import get_all_dcc_names, get_dcc_config, normalize_dcc_name
 from cfdb.downloader import cleanup_zip, download_file, extract_zip
+from cfdb.services import locks
 
 logger = logging.getLogger(__name__)
 
@@ -40,19 +41,9 @@ class SyncTask:
     current_step: Optional[str] = None
 
 
-# Module-level state
-_current_task: Optional[SyncTask] = None
-_sync_lock: asyncio.Lock = asyncio.Lock()
-
-
-def is_sync_running() -> bool:
-    """Check if a sync task is currently running."""
-    return _current_task is not None and _current_task.status == TaskStatus.RUNNING
-
-
-def get_current_task() -> Optional[SyncTask]:
-    """Get the currently running task, if any."""
-    return _current_task
+async def is_sync_running() -> bool:
+    """Check if a sync task is currently running (via DB lock)."""
+    return await locks.is_sync_running()
 
 
 async def start_sync(task_id: str, dcc_names: list[str]) -> SyncTask:
@@ -69,28 +60,26 @@ async def start_sync(task_id: str, dcc_names: list[str]) -> SyncTask:
     Raises:
         RuntimeError: If a sync is already running
     """
-    global _current_task
+    # Validate DCC names first
+    valid_dccs = get_all_dcc_names()
+    if dcc_names:
+        for dcc in dcc_names:
+            normalized = normalize_dcc_name(dcc)
+            if normalized not in valid_dccs:
+                raise ValueError(
+                    f"Unknown DCC '{dcc}'. Available: {', '.join(valid_dccs)}"
+                )
 
-    async with _sync_lock:
-        if is_sync_running():
-            raise RuntimeError("A sync task is already running")
+    normalized_names = (
+        [normalize_dcc_name(d) for d in dcc_names] if dcc_names else valid_dccs
+    )
 
-        # Validate DCC names
-        valid_dccs = get_all_dcc_names()
-        if dcc_names:
-            for dcc in dcc_names:
-                normalized = normalize_dcc_name(dcc)
-                if normalized not in valid_dccs:
-                    raise ValueError(
-                        f"Unknown DCC '{dcc}'. Available: {', '.join(valid_dccs)}"
-                    )
+    # Try to acquire the sync lock (DB-based, works across workers)
+    acquired = await locks.try_acquire_sync_lock(task_id, normalized_names)
+    if not acquired:
+        raise RuntimeError("A sync task is already running")
 
-        normalized_names = (
-            [normalize_dcc_name(d) for d in dcc_names] if dcc_names else valid_dccs
-        )
-
-        task = SyncTask(id=task_id, dcc_names=normalized_names)
-        _current_task = task
+    task = SyncTask(id=task_id, dcc_names=normalized_names)
 
     # Run sync in background
     asyncio.create_task(_run_sync(task))
@@ -100,8 +89,6 @@ async def start_sync(task_id: str, dcc_names: list[str]) -> SyncTask:
 
 async def _run_sync(task: SyncTask) -> None:
     """Execute the sync task."""
-    global _current_task
-
     try:
         await _sync_dccs(task)
         task.status = TaskStatus.COMPLETED
@@ -114,6 +101,8 @@ async def _run_sync(task: SyncTask) -> None:
         task.completed_at = datetime.utcnow()
         task.current_dcc = None
         task.current_step = None
+        # Release the sync lock
+        await locks.release_sync_lock(task.id)
 
 
 async def _sync_dccs(task: SyncTask) -> None:
@@ -149,12 +138,12 @@ async def _sync_dccs(task: SyncTask) -> None:
         extract_dir = data_path / dcc
         extract_zip(zip_path, extract_dir)
 
-        # Step 3 & 4: Clear + Load (CUTOVER - acquire mutex)
+        # Step 3 & 4: Clear + Load (CUTOVER - acquire DB lock)
         task.current_step = "cutover"
         task.progress = f"Performing database cutover for {dcc.upper()}..."
         logger.info(task.progress)
 
-        async with api.cutover_lock:
+        async with locks.CutoverLock(dcc):
             await _clear_dcc_data_async(dcc)
             await _load_dataset_async(extract_dir, dcc)
 

@@ -444,6 +444,13 @@ curl -H "Range: bytes=0-1023" http://localhost:8000/data/hubmap/xyz789
 
 Trigger a sync of C2M2 datapackages from DCCs. Requires API key authentication.
 
+**Behavior:**
+
+- **Single sync at a time** - Only one sync task can run at a time. Concurrent requests return `409 Conflict`.
+- **Background execution** - The endpoint returns immediately with a `202 Accepted` response while the sync runs in the background.
+- **Sync process** - For each DCC, the sync: downloads the datapackage, extracts it, clears existing DCC data, loads new data, then cleans up temporary files.
+- **Database cutover** - During the clear/load phase, API requests (GraphQL queries and file streaming) are briefly blocked to ensure data consistency. Requests wait for the cutover to complete before proceeding.
+
 **Headers:**
 - `X-API-Key` (required) - API key matching `SYNC_API_KEY` environment variable
 

@@ -14,6 +14,7 @@ from cfdb.api.gql.types import (
     ObjectIdScalar,
 )
 from cfdb.models import FileMetadataModel
+from cfdb.services import locks
 
 
 def from_pydantic(gql_type, obj):
@@ -47,8 +48,7 @@ class Query:
         page_size: int = api.PAGE_SIZE,
     ) -> List[FileMetadataType]:
         # Wait for any database cutover to complete
-        async with api.cutover_lock:
-            pass
+        await locks.wait_for_cutover()
 
         assert api.db is not None
         query = to_query(to_dict(input)) if input else {}
@@ -69,8 +69,7 @@ class Query:
         self, _: strawberry.Info, id: ObjectIdScalar
     ) -> Optional[FileMetadataType]:
         # Wait for any database cutover to complete
-        async with api.cutover_lock:
-            pass
+        await locks.wait_for_cutover()
 
         assert api.db is not None
         file = await api.db.files.find_one({"_id": id})

@@ -1,4 +1,3 @@
-import asyncio
 import os
 from typing import Final
 
@@ -9,6 +8,3 @@ DATABASE_NAME: Final = os.getenv("DATABASE_NAME", "cfdb")
 PAGE_SIZE: Final = 25
 
 db: AsyncIOMotorDatabase | None = None
-
-# Acquired during database cutover (clear + load) to block other API requests
-cutover_lock: asyncio.Lock = asyncio.Lock()

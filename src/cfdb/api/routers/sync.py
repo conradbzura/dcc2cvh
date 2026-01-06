@@ -57,7 +57,7 @@ async def sync(
         409: Sync already in progress
         500: Server configuration error
     """
-    if is_sync_running():
+    if await is_sync_running():
         raise HTTPException(
             status_code=409,
             detail="A sync task is already running. Please wait for it to complete.",

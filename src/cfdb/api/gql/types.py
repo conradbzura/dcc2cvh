@@ -1,4 +1,4 @@
-from typing import NewType, get_type_hints
+from typing import get_type_hints
 
 import strawberry
 from bson import ObjectId
@@ -6,11 +6,15 @@ from pydantic import BaseModel
 
 from cfdb.models import FileMetadataModel
 
-ObjectIdScalar = strawberry.scalar(
-    NewType("ObjectIdScalar", str),
+
+@strawberry.scalar(
     serialize=lambda v: str(v),
     parse_value=lambda v: ObjectId(v),
 )
+class ObjectIdScalar:
+    """A MongoDB ObjectId represented as a string in GraphQL."""
+
+    ...
 
 
 def is_pydantic_model(annotation):
@@ -64,7 +68,7 @@ def annotate(model, name=None):
                             ):
                                 T = build_strawberry_type(subtype)
 
-                                _T = field_type.__origin__[
+                                _T = field_type.__origin__[  # type: ignore[union-attr]
                                     T,
                                     *(t for t in subtypes if t is not subtype),
                                 ]

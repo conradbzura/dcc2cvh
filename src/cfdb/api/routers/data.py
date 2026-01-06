@@ -8,7 +8,7 @@ from fastapi.responses import StreamingResponse
 
 from cfdb import api
 from cfdb.models import FileMetadataModel
-from cfdb.services import drs
+from cfdb.services import drs, locks
 from cfdb.services.hubmap import (
     extract_uuid_from_persistent_id,
     fetch_access_metadata,
@@ -47,8 +47,7 @@ async def stream_file(dcc: str, local_id: str, range: Optional[str] = Header(Non
         504: Service timeout
     """
     # Wait for any database cutover to complete before proceeding
-    async with api.cutover_lock:
-        pass
+    await locks.wait_for_cutover()
 
     try:
         # 1. Validate and normalize DCC name
