@@ -41,22 +41,22 @@ def build_strawberry_type(type):
 
 
 def annotate(model, name=None):
-    def wrapper(type):
+    def wrapper(cls):
         if name:
-            type.__name__ = f"{name}Type"
+            cls.__name__ = f"{name}Type"
         for field_name, field_type in get_type_hints(model).items():
             if not is_pydantic_model(field_type):
                 if field_type is ObjectId:
-                    type.__annotations__[field_name] = ObjectIdScalar
+                    cls.__annotations__[field_name] = ObjectIdScalar
                 else:
-                    type.__annotations__[field_name] = field_type
+                    cls.__annotations__[field_name] = field_type
             else:
                 try:
                     if isinstance(field_type, type) and issubclass(
                         field_type, BaseModel
                     ):
                         T = build_strawberry_type(field_type)
-                        type.__annotations__[field_name] = T
+                        cls.__annotations__[field_name] = T
                 except TypeError:
                     pass
 
@@ -72,11 +72,11 @@ def annotate(model, name=None):
                                     T,
                                     *(t for t in subtypes if t is not subtype),
                                 ]
-                                type.__annotations__[field_name] = _T
+                                cls.__annotations__[field_name] = _T
                                 break
                         except TypeError:
                             pass
-        return type
+        return cls
 
     return wrapper
 
