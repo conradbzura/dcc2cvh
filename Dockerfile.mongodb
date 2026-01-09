@@ -1,0 +1,40 @@
+FROM mongo:latest
+
+# Copy database dump and scripts
+COPY database/ /data/database/
+COPY scripts/create-indexes.js /scripts/create-indexes.js
+
+# Create startup script
+COPY <<'EOF' /startup.sh
+#!/bin/bash
+set -e
+
+# Start MongoDB in background
+mongod --bind_ip_all &
+MONGOD_PID=$!
+
+# Wait for MongoDB to be ready
+echo "Waiting for MongoDB to start..."
+until mongosh --eval "db.adminCommand('ping')" >/dev/null 2>&1; do
+    sleep 1
+done
+echo "MongoDB started."
+
+# Restore database
+echo "Restoring database..."
+mongorestore --gzip /data/database
+
+# Create indexes
+echo "Creating indexes..."
+mongosh cfdb /scripts/create-indexes.js
+
+echo "Initialization complete."
+
+# Keep MongoDB running in foreground
+wait $MONGOD_PID
+EOF
+
+RUN chmod +x /startup.sh
+
+EXPOSE 27017
+CMD ["/startup.sh"]

@@ -1,10 +1,24 @@
+# Build stage for the Rust materializer
+FROM rust:1.83 AS builder
+WORKDIR /build
+COPY materialize/ .
+RUN cargo build --release
+
+# Runtime stage
 FROM python:3.12
 EXPOSE 8000
 ENV DATABASE_URL="mongodb://cvh-backend:27017"
 WORKDIR /app
+
+# Install the materializer binary
+COPY --from=builder /build/target/release/materialize /usr/local/bin/materialize
+
+# Install Python dependencies
 COPY . /app
 RUN pip install --no-cache-dir -e ".[dev]"
 RUN pip install uvicorn
+
+# Create non-root user
 RUN useradd app
 USER app
 WORKDIR /app/src

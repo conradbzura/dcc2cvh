@@ -12,6 +12,10 @@ Requires Python 3.10 or later.
 
 ## Setup
 
+### Prerequisites
+
+- **Docker** - For running MongoDB and the API
+
 ### Environment Variables
 
 | Variable | Description | Default |
@@ -19,26 +23,43 @@ Requires Python 3.10 or later.
 | `SYNC_API_KEY` | API key for the sync endpoint (required for sync operations) | - |
 | `SYNC_DATA_DIR` | Directory for downloaded sync data files | - |
 | `CFDB_API_URL` | Base URL for the cfdb API | `http://localhost:8000` |
+| `DATABASE_URL` | MongoDB connection string | `mongodb://localhost:27017` |
 
-### Docker Setup
-
-Start MongoDB and the API using the provided Makefile:
+### Quick Start
 
 ```bash
-# Set required environment variables
-export SYNC_API_KEY=your-api-key
-export SYNC_DATA_DIR=/path/to/sync/data
-
-# Start MongoDB with sample data
+# 1. Start MongoDB (restores sample data and creates indexes)
 make mongodb
 
-# Start the API server
+# 2. Start the API server
 make api
+
+# 3. (Optional) Sync latest DCC metadata
+curl -X POST -H "X-API-Key: dev-sync-key" http://localhost:8000/sync
 ```
 
 This starts:
-- MongoDB on port 27017
+- MongoDB on port 27017 (with indexes)
 - GraphQL/REST API on port 8000
+
+### Makefile Targets
+
+| Target | Description |
+|--------|-------------|
+| `make mongodb` | Build and start MongoDB with sample data and indexes |
+| `make api` | Build and start the API container |
+| `make materialize-files` | Manually materialize all file metadata (usually done via sync) |
+| `make materialize-dcc DCC=hubmap` | Materialize a single DCC |
+
+### Sync Workflow
+
+The sync endpoint (`POST /sync`) handles the full data refresh:
+
+1. Downloads C2M2 datapackages from DCCs
+2. Loads data into underlying MongoDB collections
+3. Runs the Rust materializer to create the fully-joined `files` collection
+
+The materializer is included in the API Docker image and runs automatically after each DCC sync.
 
 ## API Usage
 
@@ -448,7 +469,8 @@ Trigger a sync of C2M2 datapackages from DCCs. Requires API key authentication.
 
 - **Single sync at a time** - Only one sync task can run at a time. Concurrent requests return `409 Conflict`.
 - **Background execution** - The endpoint returns immediately with a `202 Accepted` response while the sync runs in the background.
-- **Sync process** - For each DCC, the sync: downloads the datapackage, extracts it, clears existing DCC data, loads new data, then cleans up temporary files.
+- **Sync process** - For each DCC, the sync: downloads the datapackage, extracts it, clears existing DCC data, loads new data, materializes files, then cleans up temporary files.
+- **Materialization** - After loading each DCC's data, the Rust materializer runs to create the denormalized `files` collection with all joins pre-computed. This is incremental - only the synced DCC's files are updated.
 - **Database cutover** - During the clear/load phase, API requests (GraphQL queries and file streaming) are briefly blocked to ensure data consistency. Requests wait for the cutover to complete before proceeding.
 
 **Headers:**

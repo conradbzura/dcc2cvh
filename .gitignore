@@ -72,3 +72,7 @@ dmypy.json
 
 # uv
 uv.lock
+
+# Rust
+materialize/target/
+Cargo.lock

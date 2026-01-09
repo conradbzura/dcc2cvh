@@ -9,16 +9,31 @@ network:
 
 mongodb:
 	make network
-	@echo "Starting the MongoDB container..."
-	docker run -d --name mongodb --network cvh-backend-network --network-alias cvh-backend -p 27017:27017 mongo:latest
-	@echo "Restoring database..."
-	docker run --rm --name mongodb-restore --network cvh-backend-network --volume $(shell pwd)/database:/database mongo:latest mongorestore --gzip --host cvh-backend:27017 /database
-	@echo "MongoDB container is up and running on port 27017."
+	@echo "Building MongoDB image..."
+	docker build -t cfdb-mongodb -f Dockerfile.mongodb .
+	@echo "Starting MongoDB container (restores data and creates indexes)..."
+	docker run -d --name mongodb --network cvh-backend-network --network-alias cvh-backend -p 27017:27017 cfdb-mongodb
+	@echo "MongoDB container starting on port 27017. Check logs with: docker logs -f mongodb"
 
-create-view:
-	@echo "Creating 'files' view..."
-	docker run --rm --network cvh-backend-network --volume $(shell pwd)/scripts:/scripts mongo:latest mongosh "mongodb://cvh-backend:27017/cfdb" /scripts/create-view.js
-	@echo "View created successfully."
+build-materialize:
+	@echo "Building materializer..."
+	cd materialize && cargo build --release
+	@echo "Materializer built at materialize/target/release/materialize"
+
+install-materialize: build-materialize
+	@echo "Installing materializer to /usr/local/bin..."
+	sudo cp materialize/target/release/materialize /usr/local/bin/
+	@echo "Materializer installed."
+
+materialize-files: build-materialize
+	@echo "Materializing 'files' collection..."
+	./materialize/target/release/materialize
+	@echo "Files collection created successfully."
+
+materialize-dcc: build-materialize
+	@echo "Materializing file metadata for $(DCC)..."
+	./materialize/target/release/materialize --submission $(DCC)
+	@echo "Done."
 
 api:
 	make network

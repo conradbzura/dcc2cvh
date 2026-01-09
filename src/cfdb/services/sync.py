@@ -4,6 +4,8 @@ import asyncio
 import csv
 import logging
 import os
+import shutil
+import subprocess
 from copy import copy
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -20,6 +22,8 @@ logger = logging.getLogger(__name__)
 
 BATCH_SIZE = 1000
 DATA_DIR = os.getenv("SYNC_DATA_DIR", ".data")
+MATERIALIZE_BIN = os.getenv("MATERIALIZE_BIN", "materialize")
+DATABASE_URL = os.getenv("DATABASE_URL", "mongodb://localhost:27017")
 
 
 class TaskStatus(str, Enum):
@@ -154,10 +158,48 @@ async def _sync_dccs(task: SyncTask) -> None:
 
         cleanup_zip(zip_path)
 
+        # Step 6: Materialize files collection for this DCC
+        task.current_step = "materializing"
+        task.progress = f"Materializing files for {dcc.upper()}..."
+        logger.info(task.progress)
+
+        await _materialize_files(dcc)
+
         logger.info(f"{dcc.upper()} synced successfully")
 
     task.progress = "All DCCs synced successfully"
     logger.info(task.progress)
+
+
+async def _materialize_files(submission: str) -> None:
+    """Run the Rust materializer for a specific DCC submission."""
+    materialize_bin = shutil.which(MATERIALIZE_BIN)
+    if not materialize_bin:
+        logger.warning(
+            f"Materialize binary not found ({MATERIALIZE_BIN}), skipping materialization"
+        )
+        return
+
+    env = os.environ.copy()
+    env["DATABASE_URL"] = DATABASE_URL
+
+    try:
+        result = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: subprocess.run(
+                [materialize_bin, "--submission", submission],
+                env=env,
+                capture_output=True,
+                text=True,
+            ),
+        )
+        if result.returncode != 0:
+            logger.error(f"Materialize failed: {result.stderr}")
+            raise RuntimeError(f"Materialize failed for {submission}")
+        logger.info(f"Materialized files for {submission}")
+    except Exception as e:
+        logger.error(f"Failed to run materializer: {e}")
+        raise
 
 
 async def _clear_dcc_data_async(submission: str) -> None:

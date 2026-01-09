@@ -1,0 +1,107 @@
+// Create indexes on all queryable fields for performance
+// Note: 'files' is a view, so indexes go on underlying collections
+
+print("Creating indexes on 'file' collection...");
+db.file.createIndex({ id_namespace: 1 });
+db.file.createIndex({ local_id: 1 });
+db.file.createIndex({ id_namespace: 1, local_id: 1 });  // composite key
+db.file.createIndex({ project_id_namespace: 1 });
+db.file.createIndex({ project_local_id: 1 });
+db.file.createIndex({ persistent_id: 1 });
+db.file.createIndex({ size_in_bytes: 1 });
+db.file.createIndex({ sha256: 1 });
+db.file.createIndex({ md5: 1 });
+db.file.createIndex({ filename: 1 });
+db.file.createIndex({ file_format: 1 });
+db.file.createIndex({ compression_format: 1 });
+db.file.createIndex({ data_type: 1 });
+db.file.createIndex({ assay_type: 1 });
+db.file.createIndex({ analysis_type: 1 });
+db.file.createIndex({ mime_type: 1 });
+db.file.createIndex({ bundle_collection_id_namespace: 1 });
+db.file.createIndex({ bundle_collection_local_id: 1 });
+db.file.createIndex({ dbgap_study_id: 1 });
+db.file.createIndex({ access_url: 1 });
+db.file.createIndex({ submission: 1 });  // for sync operations
+db.file.createIndex({ data_access_level: 1 });  // for access control
+
+print("Creating indexes on 'dcc' collection...");
+db.dcc.createIndex({ id: 1 });
+db.dcc.createIndex({ dcc_name: 1 });
+db.dcc.createIndex({ dcc_abbreviation: 1 });
+db.dcc.createIndex({ dcc_description: 1 });
+db.dcc.createIndex({ contact_email: 1 });
+db.dcc.createIndex({ contact_name: 1 });
+db.dcc.createIndex({ dcc_url: 1 });
+db.dcc.createIndex({ project_id_namespace: 1 });
+db.dcc.createIndex({ project_local_id: 1 });
+db.dcc.createIndex({ submission: 1 });
+
+print("Creating indexes on 'file_format' collection...");
+db.file_format.createIndex({ id: 1 });
+db.file_format.createIndex({ name: 1 });
+db.file_format.createIndex({ description: 1 });
+db.file_format.createIndex({ submission: 1, id: 1 }, { unique: true });  // unique per DCC
+
+print("Creating indexes on 'data_type' collection...");
+db.data_type.createIndex({ id: 1 });
+db.data_type.createIndex({ name: 1 });
+db.data_type.createIndex({ description: 1 });
+db.data_type.createIndex({ submission: 1, id: 1 }, { unique: true });  // unique per DCC
+
+print("Creating indexes on 'assay_type' collection...");
+db.assay_type.createIndex({ id: 1 });
+db.assay_type.createIndex({ name: 1 });
+db.assay_type.createIndex({ description: 1 });
+db.assay_type.createIndex({ submission: 1, id: 1 }, { unique: true });  // unique per DCC
+
+print("Creating indexes on 'collection' collection...");
+db.collection.createIndex({ id_namespace: 1 });
+db.collection.createIndex({ local_id: 1 });
+db.collection.createIndex({ id_namespace: 1, local_id: 1 });  // composite key
+db.collection.createIndex({ persistent_id: 1 });
+db.collection.createIndex({ abbreviation: 1 });
+db.collection.createIndex({ name: 1 });
+db.collection.createIndex({ description: 1 });
+db.collection.createIndex({ submission: 1 });
+
+print("Creating indexes on 'biosample' collection...");
+db.biosample.createIndex({ id_namespace: 1 });
+db.biosample.createIndex({ local_id: 1 });
+db.biosample.createIndex({ id_namespace: 1, local_id: 1 });  // composite key
+db.biosample.createIndex({ project_id_namespace: 1 });
+db.biosample.createIndex({ project_local_id: 1 });
+db.biosample.createIndex({ persistent_id: 1 });
+db.biosample.createIndex({ sample_prep_method: 1 });
+db.biosample.createIndex({ anatomy: 1 });
+db.biosample.createIndex({ biofluid: 1 });
+db.biosample.createIndex({ submission: 1 });
+
+print("Creating indexes on 'anatomy' collection...");
+db.anatomy.createIndex({ id: 1 });
+db.anatomy.createIndex({ name: 1 });
+db.anatomy.createIndex({ description: 1 });
+db.anatomy.createIndex({ submission: 1, id: 1 }, { unique: true });  // unique per DCC
+
+print("Creating indexes on 'file_in_collection' collection...");
+db.file_in_collection.createIndex({ file_id_namespace: 1 });
+db.file_in_collection.createIndex({ file_local_id: 1 });
+db.file_in_collection.createIndex({ file_id_namespace: 1, file_local_id: 1 });
+db.file_in_collection.createIndex({ collection_id_namespace: 1 });
+db.file_in_collection.createIndex({ collection_local_id: 1 });
+db.file_in_collection.createIndex({ collection_id_namespace: 1, collection_local_id: 1 });
+db.file_in_collection.createIndex({ submission: 1 });
+
+print("Creating indexes on 'biosample_in_collection' collection...");
+db.biosample_in_collection.createIndex({ biosample_id_namespace: 1 });
+db.biosample_in_collection.createIndex({ biosample_local_id: 1 });
+db.biosample_in_collection.createIndex({ biosample_id_namespace: 1, biosample_local_id: 1 });
+db.biosample_in_collection.createIndex({ collection_id_namespace: 1 });
+db.biosample_in_collection.createIndex({ collection_local_id: 1 });
+db.biosample_in_collection.createIndex({ collection_id_namespace: 1, collection_local_id: 1 });
+db.biosample_in_collection.createIndex({ submission: 1 });
+
+print("Creating indexes on 'locks' collection...");
+db.locks.createIndex({ active: 1 });
+
+print("All indexes created successfully");
