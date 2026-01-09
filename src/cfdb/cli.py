@@ -4,8 +4,6 @@ import click
 import requests
 from pymongo import MongoClient
 
-from cfdb.mongo import PIPELINE
-
 __client__ = None
 
 logging.basicConfig(level=logging.INFO)
@@ -40,19 +38,6 @@ def get_client(port=27017):
 
 @click.group()
 def cli(): ...
-
-
-@cli.command
-def create_files_view():
-    db = get_client()["cfdb-backup"]
-    db.drop_collection("files")
-    db.command(
-        "create",
-        "files",
-        viewOn="file",
-        pipeline=PIPELINE,
-        writeConcern={"w": 1},
-    )
 
 
 @cli.command("sync")

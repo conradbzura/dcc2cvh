@@ -15,6 +15,11 @@ mongodb:
 	docker run --rm --name mongodb-restore --network cvh-backend-network --volume $(shell pwd)/database:/database mongo:latest mongorestore --gzip --host cvh-backend:27017 /database
 	@echo "MongoDB container is up and running on port 27017."
 
+create-view:
+	@echo "Creating 'files' view..."
+	docker run --rm --network cvh-backend-network --volume $(shell pwd)/scripts:/scripts mongo:latest mongosh "mongodb://cvh-backend:27017/cfdb" /scripts/create-view.js
+	@echo "View created successfully."
+
 api:
 	make network
 	@echo "Building the API Docker image..."
